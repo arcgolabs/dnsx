@@ -81,6 +81,14 @@ func NewResolver(repo Repository, opts ...ResolverOption) *Resolver {
 	return resolver
 }
 
+func (r *Resolver) Repository() Repository {
+	if r == nil {
+		return nil
+	}
+
+	return r.repo
+}
+
 func WithResolverLogger(logger *slog.Logger) ResolverOption {
 	return func(resolver *Resolver) {
 		if logger != nil {

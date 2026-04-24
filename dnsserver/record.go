@@ -111,3 +111,25 @@ func (r Record) CNAME() string {
 
 	return dns.Fqdn(strings.TrimSpace(strings.ToLower(r.Data)))
 }
+
+func RecordFromRR(zone string, rr dns.RR) (Record, error) {
+	if rr == nil {
+		return Record{}, fmt.Errorf("dns rr is nil")
+	}
+
+	fields := strings.Fields(rr.String())
+	if len(fields) < 5 {
+		return Record{}, fmt.Errorf("dns rr %q is missing rdata", rr.String())
+	}
+
+	record := Record{
+		Zone:  zone,
+		Name:  rr.Header().Name,
+		TTL:   rr.Header().Ttl,
+		Class: rr.Header().Class,
+		Type:  rr.Header().Rrtype,
+		Data:  strings.Join(fields[4:], " "),
+	}
+
+	return NormalizeRecord(record)
+}
