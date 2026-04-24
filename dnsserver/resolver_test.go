@@ -1,3 +1,4 @@
+//nolint:testpackage // Tests validate internal resolver behavior without exporting extra API.
 package dnsserver
 
 import (
@@ -15,7 +16,7 @@ func TestResolverUsesRevisionToAvoidStaleCache(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	mustSaveRecord(t, ctx, store, Record{
+	mustSaveRecord(ctx, t, store, Record{
 		Zone: "example.com",
 		Name: "example.com",
 		TTL:  60,
@@ -29,7 +30,7 @@ func TestResolverUsesRevisionToAvoidStaleCache(t *testing.T) {
 		Type: dns.TypeA,
 		Data: "10.0.0.1",
 	}
-	mustSaveRecord(t, ctx, store, oldRecord)
+	mustSaveRecord(ctx, t, store, oldRecord)
 
 	resolver := NewResolver(store, WithHotCache(8, time.Minute))
 
@@ -41,10 +42,11 @@ func TestResolverUsesRevisionToAvoidStaleCache(t *testing.T) {
 		t.Fatalf("unexpected first answer: %s", got)
 	}
 
-	if err := store.DeleteRecord(ctx, oldRecord); err != nil {
-		t.Fatalf("delete old record: %v", err)
+	deleteErr := store.DeleteRecord(ctx, oldRecord)
+	if deleteErr != nil {
+		t.Fatalf("delete old record: %v", deleteErr)
 	}
-	mustSaveRecord(t, ctx, store, Record{
+	mustSaveRecord(ctx, t, store, Record{
 		Zone: "example.com",
 		Name: "www.example.com",
 		TTL:  60,
@@ -67,21 +69,21 @@ func TestResolverReturnsCNAMEChain(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	mustSaveRecord(t, ctx, store, Record{
+	mustSaveRecord(ctx, t, store, Record{
 		Zone: "example.com",
 		Name: "example.com",
 		TTL:  60,
 		Type: dns.TypeSOA,
 		Data: "ns1.example.com. hostmaster.example.com. 1 300 60 86400 60",
 	})
-	mustSaveRecord(t, ctx, store, Record{
+	mustSaveRecord(ctx, t, store, Record{
 		Zone: "example.com",
 		Name: "alias.example.com",
 		TTL:  60,
 		Type: dns.TypeCNAME,
 		Data: "www.example.com.",
 	})
-	mustSaveRecord(t, ctx, store, Record{
+	mustSaveRecord(ctx, t, store, Record{
 		Zone: "example.com",
 		Name: "www.example.com",
 		TTL:  60,
@@ -99,7 +101,7 @@ func TestResolverReturnsCNAMEChain(t *testing.T) {
 	}
 }
 
-func mustSaveRecord(t *testing.T, ctx context.Context, store *BboltStore, record Record) {
+func mustSaveRecord(ctx context.Context, t *testing.T, store *BboltStore, record Record) {
 	t.Helper()
 	if err := store.SaveRecord(ctx, record); err != nil {
 		t.Fatalf("save record %+v: %v", record, err)

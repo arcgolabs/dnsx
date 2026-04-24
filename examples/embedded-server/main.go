@@ -1,3 +1,4 @@
+// Package main demonstrates embedding dnsserver as an authoritative DNS component.
 package main
 
 import (
@@ -17,11 +18,11 @@ func main() {
 
 	workdir, err := os.MkdirTemp("", "dnsx-example-embedded-*")
 	must(err)
-	defer os.RemoveAll(workdir)
+	defer func() { must(os.RemoveAll(workdir)) }()
 
 	store, err := dnsserver.OpenBboltStore(filepath.Join(workdir, "dnsx.db"), logger)
 	must(err)
-	defer store.Close()
+	defer func() { must(store.Close()) }()
 
 	must(store.SaveRecord(ctx, dnsserver.Record{
 		Zone: "example.com",
@@ -42,17 +43,22 @@ func main() {
 		dnsserver.WithLogger(logger),
 	)
 	must(server.Start(ctx))
-	defer server.Stop(ctx)
+	defer func() { must(server.Stop(ctx)) }()
 
 	answers, err := server.LookupA(ctx, "www.example.com")
 	must(err)
 
-	fmt.Printf("server listening on %s\n", server.UDPAddr())
-	fmt.Printf("www.example.com -> %v\n", answers)
+	mustPrint("server listening on %s\n", server.UDPAddr())
+	mustPrint("www.example.com -> %v\n", answers)
 }
 
 func must(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func mustPrint(format string, values ...any) {
+	_, err := fmt.Printf(format, values...)
+	must(err)
 }

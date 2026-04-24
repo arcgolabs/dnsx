@@ -1,3 +1,4 @@
+// Package main demonstrates dnsserver internal client helpers for query and update flows.
 package main
 
 import (
@@ -17,11 +18,11 @@ func main() {
 
 	workdir, err := os.MkdirTemp("", "dnsx-example-internal-*")
 	must(err)
-	defer os.RemoveAll(workdir)
+	defer func() { must(os.RemoveAll(workdir)) }()
 
 	store, err := dnsserver.OpenBboltStore(filepath.Join(workdir, "dnsx.db"), logger)
 	must(err)
-	defer store.Close()
+	defer func() { must(store.Close()) }()
 
 	server := dnsserver.NewServerWithRepository(
 		dnsserver.Config{Listen: "127.0.0.1:0"},
@@ -29,7 +30,7 @@ func main() {
 		dnsserver.WithLogger(logger),
 	)
 	must(server.Start(ctx))
-	defer server.Stop(ctx)
+	defer func() { must(server.Stop(ctx)) }()
 
 	record := dnsserver.Record{
 		Zone: "example.com",
@@ -45,7 +46,7 @@ func main() {
 	response, _, err := server.Query(ctx, "api.example.com", dns.TypeA)
 	must(err)
 
-	fmt.Printf("answers after upsert: %d\n", len(response.Answer))
+	mustPrint("answers after upsert: %d\n", len(response.Answer))
 
 	_, _, err = server.DeleteRecord(ctx, record)
 	must(err)
@@ -53,11 +54,16 @@ func main() {
 	response, _, err = server.Query(ctx, "api.example.com", dns.TypeA)
 	must(err)
 
-	fmt.Printf("answers after delete: %d\n", len(response.Answer))
+	mustPrint("answers after delete: %d\n", len(response.Answer))
 }
 
 func must(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func mustPrint(format string, values ...any) {
+	_, err := fmt.Printf(format, values...)
+	must(err)
 }

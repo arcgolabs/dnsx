@@ -161,7 +161,7 @@ func (c *Client) UpdateRemove(ctx context.Context, zone string, records ...dns.R
 	return c.ExchangeMessage(ctx, message)
 }
 
-func (c *Client) UpdateRemoveRRSet(ctx context.Context, zone string, name string, rrtype uint16) (*dns.Msg, time.Duration, error) {
+func (c *Client) UpdateRemoveRRSet(ctx context.Context, zone, name string, rrtype uint16) (*dns.Msg, time.Duration, error) {
 	message := new(dns.Msg)
 	message.SetUpdate(dns.Fqdn(zone))
 	message.RemoveRRset([]dns.RR{
@@ -177,7 +177,7 @@ func (c *Client) UpdateRemoveRRSet(ctx context.Context, zone string, name string
 	return c.ExchangeMessage(ctx, message)
 }
 
-func (c *Client) UpdateRemoveName(ctx context.Context, zone string, name string) (*dns.Msg, time.Duration, error) {
+func (c *Client) UpdateRemoveName(ctx context.Context, zone, name string) (*dns.Msg, time.Duration, error) {
 	message := new(dns.Msg)
 	message.SetUpdate(dns.Fqdn(zone))
 	message.RemoveName([]dns.RR{

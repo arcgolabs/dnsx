@@ -85,7 +85,14 @@ func newLogger(cfg Config) (*slog.Logger, error) {
 		options = append(options, logx.WithCaller(true))
 	}
 
-	return logx.New(options...)
+	logger, err := logx.New(options...)
+	if err != nil {
+		return nil, oops.In("cmd/server").
+			With("op", "new_logger", "level", cfg.Log.Level, "file", cfg.Log.File).
+			Wrapf(err, "create logger")
+	}
+
+	return logger, nil
 }
 
 func openStore(cfg Config, logger *slog.Logger) (*dnsserver.BboltStore, error) {
@@ -102,13 +109,17 @@ func openStore(cfg Config, logger *slog.Logger) (*dnsserver.BboltStore, error) {
 
 	seed, err := dnsserver.LoadSeedData(cfg.Seed.File)
 	if err != nil {
-		_ = store.Close()
+		if closeErr := store.Close(); closeErr != nil {
+			logger.Error("close store after seed load failure", "err", closeErr)
+		}
 		return nil, oops.In("cmd/server").
 			With("op", "load_seed", "path", cfg.Seed.File).
 			Wrapf(err, "load seed data")
 	}
 	if err := dnsserver.ApplySeedData(context.Background(), store, seed); err != nil {
-		_ = store.Close()
+		if closeErr := store.Close(); closeErr != nil {
+			logger.Error("close store after seed apply failure", "err", closeErr)
+		}
 		return nil, oops.In("cmd/server").
 			With("op", "apply_seed", "path", cfg.Seed.File).
 			Wrapf(err, "apply seed data")

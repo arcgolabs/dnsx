@@ -3,7 +3,6 @@ package dnsserver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/samber/lo"
 	"github.com/samber/mo"
+	"github.com/samber/oops"
 )
 
 type ResolverOption func(*Resolver)
@@ -138,34 +138,6 @@ func WithNegativeCacheTTL(ttl time.Duration) ResolverOption {
 	}
 }
 
-func (r *Resolver) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
-	reply := new(dns.Msg)
-	reply.SetReply(request)
-	reply.Authoritative = false
-	reply.RecursionAvailable = false
-
-	if request.Opcode != dns.OpcodeQuery || len(request.Question) == 0 {
-		reply.Rcode = dns.RcodeFormatError
-		_ = writer.WriteMsg(reply)
-		return
-	}
-
-	resolution, err := r.Resolve(context.Background(), request.Question[0])
-	if err != nil {
-		r.logger.Error("dns resolve failed", "err", err, "name", request.Question[0].Name, "type", request.Question[0].Qtype)
-		reply.Rcode = dns.RcodeServerFailure
-		_ = writer.WriteMsg(reply)
-		return
-	}
-
-	reply.Rcode = resolution.RCode
-	reply.Authoritative = resolution.Authoritative
-	reply.Answer = resolution.Answer
-	reply.Ns = resolution.Authority
-	reply.Extra = resolution.Extra
-	_ = writer.WriteMsg(reply)
-}
-
 func (r *Resolver) Resolve(ctx context.Context, question dns.Question) (Resolution, error) {
 	name := dns.Fqdn(strings.ToLower(strings.TrimSpace(question.Name)))
 	if name == "." {
@@ -209,115 +181,6 @@ func (r *Resolver) Resolve(ctx context.Context, question dns.Question) (Resoluti
 	return resolution, nil
 }
 
-func (r *Resolver) resolveAuthoritative(ctx context.Context, zone string, name string, qtype uint16, qclass uint16) (Resolution, error) {
-	if qclass != dns.ClassINET && qclass != dns.ClassANY {
-		return Resolution{
-			RCode:         dns.RcodeNotImplemented,
-			Authoritative: true,
-		}, nil
-	}
-
-	if qtype == dns.TypeANY {
-		records, err := r.repo.LookupAll(ctx, zone, name, qclass)
-		if err != nil {
-			return Resolution{}, err
-		}
-		if len(records) == 0 {
-			return r.negativeResponse(ctx, zone, name, qclass)
-		}
-
-		answer, err := recordsToRRs(records)
-		if err != nil {
-			return Resolution{}, err
-		}
-
-		return Resolution{
-			RCode:         dns.RcodeSuccess,
-			Answer:        answer,
-			Authoritative: true,
-		}, nil
-	}
-
-	exact, err := r.repo.Lookup(ctx, zone, name, qtype, qclass)
-	if err != nil {
-		return Resolution{}, err
-	}
-	if len(exact) > 0 {
-		answer, err := recordsToRRs(exact)
-		if err != nil {
-			return Resolution{}, err
-		}
-
-		return Resolution{
-			RCode:         dns.RcodeSuccess,
-			Answer:        answer,
-			Authoritative: true,
-		}, nil
-	}
-
-	cnames, err := r.repo.Lookup(ctx, zone, name, dns.TypeCNAME, qclass)
-	if err != nil {
-		return Resolution{}, err
-	}
-	if len(cnames) > 0 {
-		answer, err := recordsToRRs(cnames)
-		if err != nil {
-			return Resolution{}, err
-		}
-
-		target := lo.LastOrEmpty(cnames).CNAME()
-		if target != "" && qtype != dns.TypeCNAME && dns.IsSubDomain(zone, target) {
-			targetRecords, err := r.repo.Lookup(ctx, zone, target, qtype, qclass)
-			if err != nil {
-				return Resolution{}, err
-			}
-			if len(targetRecords) > 0 {
-				targetAnswer, err := recordsToRRs(targetRecords)
-				if err != nil {
-					return Resolution{}, err
-				}
-				answer = append(answer, targetAnswer...)
-			}
-		}
-
-		return Resolution{
-			RCode:         dns.RcodeSuccess,
-			Answer:        answer,
-			Authoritative: true,
-		}, nil
-	}
-
-	return r.negativeResponse(ctx, zone, name, qclass)
-}
-
-func (r *Resolver) negativeResponse(ctx context.Context, zone string, name string, qclass uint16) (Resolution, error) {
-	all, err := r.repo.LookupAll(ctx, zone, name, qclass)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	soa, err := r.repo.Lookup(ctx, zone, zone, dns.TypeSOA, qclass)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	authority, err := recordsToRRs(soa)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	rcode := dns.RcodeSuccess
-	if len(all) == 0 {
-		rcode = dns.RcodeNameError
-	}
-
-	return Resolution{
-		RCode:         rcode,
-		Authority:     authority,
-		Authoritative: true,
-	}, nil
-}
-
 func (r *Resolver) matchZone(ctx context.Context, name string) (mo.Option[string], error) {
 	revision := r.revisionFunc()
 
@@ -329,17 +192,40 @@ func (r *Resolver) matchZone(ctx context.Context, name string) (mo.Option[string
 	}
 	r.zonesMu.RUnlock()
 
-	zones, err := r.repo.ListZones(ctx)
+	zones, err := r.listZones(ctx)
 	if err != nil {
-		return mo.None[string](), fmt.Errorf("list zones: %w", err)
+		return mo.None[string](), err
 	}
 
+	names := uniqueSortedZoneNames(zones)
+
+	r.zonesMu.Lock()
+	r.zones = names
+	r.zonesVersion = revision
+	r.zonesMu.Unlock()
+
+	return findZone(names, name), nil
+}
+
+func (r *Resolver) listZones(ctx context.Context) ([]Zone, error) {
+	zones, err := r.repo.ListZones(ctx)
+	if err != nil {
+		return nil, oops.In("dnsserver").
+			With("op", "list_zones_for_resolver").
+			Wrapf(err, "list zones")
+	}
+
+	return zones, nil
+}
+
+func uniqueSortedZoneNames(zones []Zone) []string {
 	zoneSet := collectionset.NewOrderedSet[string]()
 	lo.ForEach(zones, func(zone Zone, _ int) {
 		zoneSet.Add(zone.Name)
 	})
+
 	names := zoneSet.Values()
-	slices.SortFunc(names, func(left string, right string) int {
+	slices.SortFunc(names, func(left, right string) int {
 		switch {
 		case len(left) > len(right):
 			return -1
@@ -354,12 +240,7 @@ func (r *Resolver) matchZone(ctx context.Context, name string) (mo.Option[string
 		}
 	})
 
-	r.zonesMu.Lock()
-	r.zones = names
-	r.zonesVersion = revision
-	r.zonesMu.Unlock()
-
-	return findZone(names, name), nil
+	return names
 }
 
 func findZone(zones []string, name string) mo.Option[string] {
@@ -377,7 +258,9 @@ func recordsToRRs(records []Record) ([]dns.RR, error) {
 	for _, record := range records {
 		rr, err := record.RR()
 		if err != nil {
-			return nil, fmt.Errorf("build rr for %s type=%d: %w", record.Name, record.Type, err)
+			return nil, oops.In("dnsserver").
+				With("op", "records_to_rrs", "name", record.Name, "type", record.Type).
+				Wrapf(err, "build rr from record")
 		}
 
 		rrs = append(rrs, rr)
@@ -385,81 +268,6 @@ func recordsToRRs(records []Record) ([]dns.RR, error) {
 
 	return rrs, nil
 }
-
-func freezeResolution(resolution Resolution) cachedResponse {
-	return cachedResponse{
-		RCode:         resolution.RCode,
-		Answer:        lo.Map(resolution.Answer, func(rr dns.RR, _ int) string { return rr.String() }),
-		Authority:     lo.Map(resolution.Authority, func(rr dns.RR, _ int) string { return rr.String() }),
-		Extra:         lo.Map(resolution.Extra, func(rr dns.RR, _ int) string { return rr.String() }),
-		Authoritative: resolution.Authoritative,
-	}
-}
-
-func (response cachedResponse) materialize() (Resolution, error) {
-	answer, err := parseRRStrings(response.Answer)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	authority, err := parseRRStrings(response.Authority)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	extra, err := parseRRStrings(response.Extra)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	return Resolution{
-		RCode:         response.RCode,
-		Answer:        answer,
-		Authority:     authority,
-		Extra:         extra,
-		Authoritative: response.Authoritative,
-	}, nil
-}
-
-func parseRRStrings(lines []string) ([]dns.RR, error) {
-	result := make([]dns.RR, 0, len(lines))
-	for _, line := range lines {
-		rr, err := dns.NewRR(line)
-		if err != nil {
-			return nil, fmt.Errorf("parse cached rr %q: %w", line, err)
-		}
-
-		result = append(result, rr)
-	}
-
-	return result, nil
-}
-
-func (r *Resolver) cacheTTLFor(resolution Resolution) time.Duration {
-	minTTL := uint32(0)
-	all := append(append([]dns.RR(nil), resolution.Answer...), resolution.Authority...)
-	all = append(all, resolution.Extra...)
-
-	for _, rr := range all {
-		ttl := rr.Header().Ttl
-		if minTTL == 0 || ttl < minTTL {
-			minTTL = ttl
-		}
-	}
-
-	if minTTL == 0 {
-		return r.negativeTTL
-	}
-
-	ttl := time.Duration(minTTL) * time.Second
-	if r.maxCacheTTL > 0 && ttl > r.maxCacheTTL {
-		return r.maxCacheTTL
-	}
-
-	return ttl
-}
-
-var _ dns.Handler = (*Resolver)(nil)
 
 func (response Resolution) IsNegative() bool {
 	return response.RCode == dns.RcodeNameError || (response.RCode == dns.RcodeSuccess && len(response.Answer) == 0)

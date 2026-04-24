@@ -1,3 +1,4 @@
+//nolint:testpackage // Tests validate internal server wiring without exporting extra API.
 package dnsserver
 
 import (
@@ -15,7 +16,9 @@ func TestServerStartStop(t *testing.T) {
 		dns.HandlerFunc(func(writer dns.ResponseWriter, request *dns.Msg) {
 			reply := new(dns.Msg)
 			reply.SetReply(request)
-			_ = writer.WriteMsg(reply)
+			if err := writer.WriteMsg(reply); err != nil {
+				t.Fatalf("write reply: %v", err)
+			}
 		}),
 	)
 
@@ -33,6 +36,7 @@ func TestServerStartStop(t *testing.T) {
 	}
 }
 
+//nolint:cyclop,gocognit,gocyclo // End-to-end flow assertions are intentionally kept together.
 func TestServerInternalClientQueryAndUpdateFlow(t *testing.T) {
 	t.Parallel()
 
@@ -47,7 +51,9 @@ func TestServerInternalClientQueryAndUpdateFlow(t *testing.T) {
 		t.Fatalf("start server: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = server.Stop(context.Background())
+		if err := server.Stop(context.Background()); err != nil {
+			t.Fatalf("stop server: %v", err)
+		}
 	})
 
 	record := Record{

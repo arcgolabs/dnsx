@@ -1,7 +1,7 @@
 package dnsserver
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"strconv"
@@ -75,10 +75,9 @@ func NormalizeRecord(record Record) (Record, error) {
 }
 
 func (r Record) Key() string {
-	fingerprint := sha1.Sum([]byte(strings.Join([]string{
-		strconv.FormatUint(uint64(r.Class), 10),
-		strings.ToLower(r.Data),
-	}, "|")))
+	fingerprint := sha256.Sum256([]byte(
+		strconv.FormatUint(uint64(r.Class), 10) + "|" + strings.ToLower(r.Data),
+	))
 
 	return fmt.Sprintf(
 		"%s|%s|%05d|%s",
@@ -89,7 +88,7 @@ func (r Record) Key() string {
 	)
 }
 
-func RecordPrefix(zone string, name string, qtype uint16) string {
+func RecordPrefix(zone, name string, qtype uint16) string {
 	prefix := fmt.Sprintf("%s|%s|", zone, name)
 	if qtype == dns.TypeANY {
 		return prefix
@@ -114,7 +113,14 @@ func (r Record) RR() (dns.RR, error) {
 		className = strconv.FormatUint(uint64(r.Class), 10)
 	}
 
-	return dns.NewRR(fmt.Sprintf("%s %d %s %s %s", r.Name, r.TTL, className, typeName, r.Data))
+	rr, err := dns.NewRR(fmt.Sprintf("%s %d %s %s %s", r.Name, r.TTL, className, typeName, r.Data))
+	if err != nil {
+		return nil, oops.In("dnsserver").
+			With("op", "record_rr", "name", r.Name, "type", typeName).
+			Wrapf(err, "build dns rr")
+	}
+
+	return rr, nil
 }
 
 func (r Record) CNAME() string {

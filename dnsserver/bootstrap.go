@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	collectionset "github.com/arcgolabs/collectionx/set"
@@ -17,17 +18,18 @@ type SeedData struct {
 }
 
 func LoadSeedData(path string) (SeedData, error) {
-	content, err := os.ReadFile(path)
+	cleanPath := filepath.Clean(path)
+	content, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return SeedData{}, oops.In("dnsserver").
-			With("op", "load_seed_data", "path", path).
+			With("op", "load_seed_data", "path", cleanPath).
 			Wrapf(err, "read seed data")
 	}
 
 	var seed SeedData
 	if err := json.Unmarshal(content, &seed); err != nil {
 		return SeedData{}, oops.In("dnsserver").
-			With("op", "load_seed_data", "path", path).
+			With("op", "load_seed_data", "path", cleanPath).
 			Wrapf(err, "decode seed data")
 	}
 
@@ -35,14 +37,30 @@ func LoadSeedData(path string) (SeedData, error) {
 }
 
 func ApplySeedData(ctx context.Context, repo Repository, seed SeedData) error {
+	zoneNames, err := collectSeedZones(seed)
+	if err != nil {
+		return err
+	}
+
+	records, err := collectSeedRecords(seed, zoneNames)
+	if err != nil {
+		return err
+	}
+
+	if err := saveSeedZones(ctx, repo, zoneNames.Values()); err != nil {
+		return err
+	}
+
+	return saveSeedRecords(ctx, repo, records)
+}
+
+func collectSeedZones(seed SeedData) (*collectionset.OrderedSet[string], error) {
 	zoneNames := collectionset.NewOrderedSet[string]()
-	records := make([]Record, 0, len(seed.Records))
-	recordKeys := collectionset.NewOrderedSet[string]()
 
 	for _, zone := range seed.Zones {
 		normalized, err := NormalizeZoneName(zone.Name)
 		if err != nil {
-			return oops.In("dnsserver").
+			return nil, oops.In("dnsserver").
 				With("op", "apply_seed_data", "section", "zones", "zone", zone.Name).
 				Wrapf(err, "normalize seed zone")
 		}
@@ -50,10 +68,17 @@ func ApplySeedData(ctx context.Context, repo Repository, seed SeedData) error {
 		zoneNames.Add(normalized)
 	}
 
+	return zoneNames, nil
+}
+
+func collectSeedRecords(seed SeedData, zoneNames *collectionset.OrderedSet[string]) ([]Record, error) {
+	records := make([]Record, 0, len(seed.Records))
+	recordKeys := collectionset.NewOrderedSet[string]()
+
 	for _, record := range seed.Records {
 		normalized, err := NormalizeRecord(record)
 		if err != nil {
-			return oops.In("dnsserver").
+			return nil, oops.In("dnsserver").
 				With("op", "apply_seed_data", "section", "records", "zone", record.Zone, "name", record.Name, "type", record.Type).
 				Wrapf(err, "normalize seed record")
 		}
@@ -65,7 +90,11 @@ func ApplySeedData(ctx context.Context, repo Repository, seed SeedData) error {
 		}
 	}
 
-	for _, zoneName := range zoneNames.Values() {
+	return records, nil
+}
+
+func saveSeedZones(ctx context.Context, repo Repository, zones []string) error {
+	for _, zoneName := range zones {
 		if err := repo.SaveZone(ctx, Zone{Name: zoneName}); err != nil {
 			return oops.In("dnsserver").
 				With("op", "apply_seed_data", "section", "zones", "zone", zoneName).
@@ -73,6 +102,10 @@ func ApplySeedData(ctx context.Context, repo Repository, seed SeedData) error {
 		}
 	}
 
+	return nil
+}
+
+func saveSeedRecords(ctx context.Context, repo Repository, records []Record) error {
 	for _, record := range records {
 		if err := repo.SaveRecord(ctx, record); err != nil {
 			return oops.In("dnsserver").

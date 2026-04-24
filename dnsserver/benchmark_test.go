@@ -1,9 +1,9 @@
+//nolint:testpackage // Benchmarks exercise package internals without widening the public API.
 package dnsserver
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"path/filepath"
 	"sync/atomic"
@@ -13,177 +13,177 @@ import (
 	"github.com/miekg/dns"
 )
 
-func BenchmarkResolverQuery(b *testing.B) {
+func BenchmarkResolverQueryAHit(b *testing.B) {
+	benchmarkResolverQuery(b, dns.Question{Name: "www.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}, 1)
+}
+
+func BenchmarkResolverQueryAHitParallel(b *testing.B) {
+	ctx := context.Background()
+	resolver := newBenchmarkResolver(b)
+	question := dns.Question{Name: "www.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			assertResolverAnswerCount(ctx, b, resolver, question, 1)
+		}
+	})
+}
+
+func BenchmarkResolverQueryCNAMEChain(b *testing.B) {
+	benchmarkResolverQuery(b, dns.Question{Name: "alias.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}, 2)
+}
+
+func BenchmarkResolverQueryNXDomain(b *testing.B) {
+	ctx := context.Background()
+	resolver := newBenchmarkResolver(b)
+	question := dns.Question{Name: "missing.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		resolution, err := resolver.Resolve(ctx, question)
+		if err != nil {
+			b.Fatalf("resolve nxdomain: %v", err)
+		}
+		if resolution.RCode != dns.RcodeNameError {
+			b.Fatalf("expected NXDOMAIN, got %d", resolution.RCode)
+		}
+	}
+}
+
+func BenchmarkServerQueryInternalClientA(b *testing.B) {
+	benchmarkServerQuery(b, false)
+}
+
+func BenchmarkServerQueryInternalClientAParallel(b *testing.B) {
+	benchmarkServerQuery(b, true)
+}
+
+func BenchmarkServerUpdateUpsertDelete(b *testing.B) {
+	benchmarkServerUpdate(b, false)
+}
+
+func BenchmarkServerUpdateUpsertDeleteParallel(b *testing.B) {
+	benchmarkServerUpdate(b, true)
+}
+
+func benchmarkResolverQuery(b *testing.B, question dns.Question, expectedAnswers int) {
+	b.Helper()
+
+	ctx := context.Background()
+	resolver := newBenchmarkResolver(b)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		assertResolverAnswerCount(ctx, b, resolver, question, expectedAnswers)
+	}
+}
+
+func benchmarkServerQuery(b *testing.B, parallel bool) {
+	b.Helper()
+
+	ctx := context.Background()
+	server := newBenchmarkServer(b)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	if !parallel {
+		for range b.N {
+			assertServerAnswerCount(ctx, b, server, "www.example.com", 1)
+		}
+		return
+	}
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			assertServerAnswerCount(ctx, b, server, "www.example.com", 1)
+		}
+	})
+}
+
+func benchmarkServerUpdate(b *testing.B, parallel bool) {
+	b.Helper()
+
+	ctx := context.Background()
+	server := newBenchmarkServer(b)
+	var counter atomic.Uint64
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	if !parallel {
+		for range b.N {
+			benchmarkServerUpdateCycle(ctx, b, server, benchmarkRecord(counter.Add(1)))
+		}
+		return
+	}
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			benchmarkServerUpdateCycle(ctx, b, server, benchmarkRecord(counter.Add(1)))
+		}
+	})
+}
+
+func benchmarkServerUpdateCycle(ctx context.Context, b *testing.B, server *Server, record Record) {
+	b.Helper()
+
+	response, _, err := server.UpsertRecord(ctx, record)
+	if err != nil {
+		b.Fatalf("upsert record: %v", err)
+	}
+	if response.Rcode != dns.RcodeSuccess {
+		b.Fatalf("unexpected upsert rcode: %d", response.Rcode)
+	}
+
+	response, _, err = server.DeleteRecord(ctx, record)
+	if err != nil {
+		b.Fatalf("delete record: %v", err)
+	}
+	if response.Rcode != dns.RcodeSuccess {
+		b.Fatalf("unexpected delete rcode: %d", response.Rcode)
+	}
+}
+
+func assertResolverAnswerCount(ctx context.Context, b *testing.B, resolver *Resolver, question dns.Question, expected int) {
+	b.Helper()
+
+	resolution, err := resolver.Resolve(ctx, question)
+	if err != nil {
+		b.Fatalf("resolve %s: %v", question.Name, err)
+	}
+	if len(resolution.Answer) != expected {
+		b.Fatalf("expected %d answers, got %d", expected, len(resolution.Answer))
+	}
+}
+
+func assertServerAnswerCount(ctx context.Context, b *testing.B, server *Server, name string, expected int) {
+	b.Helper()
+
+	response, _, err := server.Query(ctx, name, dns.TypeA)
+	if err != nil {
+		b.Fatalf("server query %s: %v", name, err)
+	}
+	if len(response.Answer) != expected {
+		b.Fatalf("expected %d answers, got %d", expected, len(response.Answer))
+	}
+}
+
+func newBenchmarkResolver(b *testing.B) *Resolver {
+	b.Helper()
+
 	ctx := context.Background()
 	store := newBenchmarkStore(b)
-	seedBenchmarkStore(b, ctx, store)
+	seedBenchmarkStore(ctx, b, store)
 
-	resolver := NewResolver(
+	return NewResolver(
 		store,
 		WithResolverLogger(benchmarkLogger()),
 		WithHotCache(4096, time.Minute),
 		WithNegativeCacheTTL(time.Minute),
 	)
-
-	b.Run("AHit", func(b *testing.B) {
-		question := dns.Question{Name: "www.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for range b.N {
-			resolution, err := resolver.Resolve(ctx, question)
-			if err != nil {
-				b.Fatalf("resolve a hit: %v", err)
-			}
-			if len(resolution.Answer) != 1 {
-				b.Fatalf("expected 1 answer, got %d", len(resolution.Answer))
-			}
-		}
-	})
-
-	b.Run("AHitParallel", func(b *testing.B) {
-		question := dns.Question{Name: "www.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				resolution, err := resolver.Resolve(ctx, question)
-				if err != nil {
-					b.Fatalf("resolve a hit parallel: %v", err)
-				}
-				if len(resolution.Answer) != 1 {
-					b.Fatalf("expected 1 answer, got %d", len(resolution.Answer))
-				}
-			}
-		})
-	})
-
-	b.Run("CNAMEChain", func(b *testing.B) {
-		question := dns.Question{Name: "alias.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for range b.N {
-			resolution, err := resolver.Resolve(ctx, question)
-			if err != nil {
-				b.Fatalf("resolve cname chain: %v", err)
-			}
-			if len(resolution.Answer) != 2 {
-				b.Fatalf("expected 2 answers, got %d", len(resolution.Answer))
-			}
-		}
-	})
-
-	b.Run("NXDomain", func(b *testing.B) {
-		question := dns.Question{Name: "missing.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for range b.N {
-			resolution, err := resolver.Resolve(ctx, question)
-			if err != nil {
-				b.Fatalf("resolve nxdomain: %v", err)
-			}
-			if resolution.RCode != dns.RcodeNameError {
-				b.Fatalf("expected NXDOMAIN, got %d", resolution.RCode)
-			}
-		}
-	})
-}
-
-func BenchmarkServerQuery(b *testing.B) {
-	ctx := context.Background()
-	server := newBenchmarkServer(b)
-
-	b.Run("InternalClientA", func(b *testing.B) {
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for range b.N {
-			response, _, err := server.Query(ctx, "www.example.com", dns.TypeA)
-			if err != nil {
-				b.Fatalf("server query a: %v", err)
-			}
-			if len(response.Answer) != 1 {
-				b.Fatalf("expected 1 answer, got %d", len(response.Answer))
-			}
-		}
-	})
-
-	b.Run("InternalClientAParallel", func(b *testing.B) {
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				response, _, err := server.Query(ctx, "www.example.com", dns.TypeA)
-				if err != nil {
-					b.Fatalf("server query a parallel: %v", err)
-				}
-				if len(response.Answer) != 1 {
-					b.Fatalf("expected 1 answer, got %d", len(response.Answer))
-				}
-			}
-		})
-	})
-}
-
-func BenchmarkServerUpdate(b *testing.B) {
-	ctx := context.Background()
-	server := newBenchmarkServer(b)
-
-	b.Run("UpsertDelete", func(b *testing.B) {
-		var counter atomic.Uint64
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for range b.N {
-			record := benchmarkRecord(counter.Add(1))
-			response, _, err := server.UpsertRecord(ctx, record)
-			if err != nil {
-				b.Fatalf("upsert record: %v", err)
-			}
-			if response.Rcode != dns.RcodeSuccess {
-				b.Fatalf("unexpected upsert rcode: %d", response.Rcode)
-			}
-
-			response, _, err = server.DeleteRecord(ctx, record)
-			if err != nil {
-				b.Fatalf("delete record: %v", err)
-			}
-			if response.Rcode != dns.RcodeSuccess {
-				b.Fatalf("unexpected delete rcode: %d", response.Rcode)
-			}
-		}
-	})
-
-	b.Run("UpsertDeleteParallel", func(b *testing.B) {
-		var counter atomic.Uint64
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				record := benchmarkRecord(counter.Add(1))
-				response, _, err := server.UpsertRecord(ctx, record)
-				if err != nil {
-					b.Fatalf("parallel upsert record: %v", err)
-				}
-				if response.Rcode != dns.RcodeSuccess {
-					b.Fatalf("unexpected parallel upsert rcode: %d", response.Rcode)
-				}
-
-				response, _, err = server.DeleteRecord(ctx, record)
-				if err != nil {
-					b.Fatalf("parallel delete record: %v", err)
-				}
-				if response.Rcode != dns.RcodeSuccess {
-					b.Fatalf("unexpected parallel delete rcode: %d", response.Rcode)
-				}
-			}
-		})
-	})
 }
 
 func newBenchmarkServer(b *testing.B) *Server {
@@ -191,7 +191,7 @@ func newBenchmarkServer(b *testing.B) *Server {
 
 	ctx := context.Background()
 	store := newBenchmarkStore(b)
-	seedBenchmarkStore(b, ctx, store)
+	seedBenchmarkStore(ctx, b, store)
 
 	resolver := NewResolver(
 		store,
@@ -209,8 +209,9 @@ func newBenchmarkServer(b *testing.B) *Server {
 		b.Fatalf("start benchmark server: %v", err)
 	}
 	b.Cleanup(func() {
-		_ = server.Stop(context.Background())
-		_ = store.Close()
+		if err := server.Stop(context.Background()); err != nil {
+			b.Fatalf("stop benchmark server: %v", err)
+		}
 	})
 
 	return server
@@ -225,13 +226,15 @@ func newBenchmarkStore(b *testing.B) *BboltStore {
 		b.Fatalf("open benchmark store: %v", err)
 	}
 	b.Cleanup(func() {
-		_ = store.Close()
+		if err := store.Close(); err != nil {
+			b.Fatalf("close benchmark store: %v", err)
+		}
 	})
 
 	return store
 }
 
-func seedBenchmarkStore(b *testing.B, ctx context.Context, store *BboltStore) {
+func seedBenchmarkStore(ctx context.Context, b *testing.B, store *BboltStore) {
 	b.Helper()
 
 	for _, record := range []Record{
@@ -275,5 +278,5 @@ func benchmarkRecord(index uint64) Record {
 }
 
 func benchmarkLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }

@@ -49,7 +49,9 @@ type CacheConfig struct {
 func loadConfig(args []string) (Config, error) {
 	flagSet := newFlagSet()
 	if err := flagSet.Parse(args); err != nil {
-		return Config{}, err
+		return Config{}, oops.In("cmd/server").
+			With("op", "parse_flags").
+			Wrapf(err, "parse flags")
 	}
 
 	configFile := findConfigFile(args).
@@ -117,7 +119,7 @@ func defaultConfig() Config {
 }
 
 func findConfigFile(args []string) mo.Option[string] {
-	for index := 0; index < len(args); index++ {
+	for index := range args {
 		switch {
 		case args[index] == "--config" && index+1 < len(args):
 			return mo.Some(strings.TrimSpace(args[index+1]))

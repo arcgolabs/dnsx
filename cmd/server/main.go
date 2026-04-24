@@ -12,13 +12,17 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	cfg, err := loadConfig(os.Args[1:])
 	if errors.Is(err, pflag.ErrHelp) {
-		os.Exit(0)
+		return 0
 	}
 	if err != nil {
 		slog.Default().Error("load standalone config failed", "err", err)
-		os.Exit(1)
+		return 1
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -28,7 +32,7 @@ func main() {
 	report := app.ValidateReport()
 	if err := report.Err(); err != nil {
 		slog.Default().Error("standalone app validation failed", "err", err)
-		os.Exit(1)
+		return 1
 	}
 
 	logger := defaultLogger()
@@ -38,6 +42,8 @@ func main() {
 
 	if err := app.RunContext(ctx); err != nil {
 		logger.Error("standalone app exited with error", "err", err)
-		os.Exit(1)
+		return 1
 	}
+
+	return 0
 }

@@ -1,3 +1,4 @@
+//nolint:testpackage // Tests validate internal store behavior without exporting extra API.
 package dnsserver
 
 import (
@@ -52,7 +53,9 @@ func newTestStore(t *testing.T) *BboltStore {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = store.Close()
+		if err := store.Close(); err != nil {
+			t.Fatalf("close store: %v", err)
+		}
 	})
 
 	return store

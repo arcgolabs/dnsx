@@ -77,7 +77,7 @@ func toHotAlgorithm(algorithm CacheAlgorithm) hot.EvictionAlgorithm {
 	case CacheSIEVE:
 		return hot.SIEVE
 	case CacheLRU:
-		fallthrough
+		return hot.LRU
 	default:
 		return hot.LRU
 	}

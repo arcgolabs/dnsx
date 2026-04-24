@@ -70,7 +70,9 @@ func (s *BboltStore) Close() error {
 		return nil
 	}
 
-	return s.db.Close()
+	return oops.In("dnsserver").
+		With("op", "close_bbolt_store").
+		Wrapf(s.db.Close(), "close bbolt store")
 }
 
 func (s *BboltStore) SaveZone(ctx context.Context, zone Zone) error {
@@ -112,12 +114,16 @@ func (s *BboltStore) DeleteZone(ctx context.Context, zone string) error {
 			keys = append(keys, key)
 			return nil
 		}); err != nil {
-			return err
+			return oops.In("dnsserver").
+				With("op", "delete_zone_records_scan", "zone", normalized).
+				Wrapf(err, "scan zone records")
 		}
 
 		for _, key := range keys {
 			if err := tx.Delete(key); err != nil {
-				return err
+				return oops.In("dnsserver").
+					With("op", "delete_zone_record", "zone", normalized, "key", key).
+					Wrapf(err, "delete zone record")
 			}
 		}
 
@@ -192,7 +198,7 @@ func (s *BboltStore) DeleteRecord(ctx context.Context, record Record) error {
 	return nil
 }
 
-func (s *BboltStore) Lookup(ctx context.Context, zone string, name string, qtype uint16, qclass uint16) ([]Record, error) {
+func (s *BboltStore) Lookup(ctx context.Context, zone, name string, qtype, qclass uint16) ([]Record, error) {
 	normalizedZone, normalizedName, err := normalizeLookup(zone, name)
 	if err != nil {
 		return nil, err
@@ -201,7 +207,7 @@ func (s *BboltStore) Lookup(ctx context.Context, zone string, name string, qtype
 	return s.lookupByPrefix(ctx, RecordPrefix(normalizedZone, normalizedName, qtype), qclass)
 }
 
-func (s *BboltStore) LookupAll(ctx context.Context, zone string, name string, qclass uint16) ([]Record, error) {
+func (s *BboltStore) LookupAll(ctx context.Context, zone, name string, qclass uint16) ([]Record, error) {
 	normalizedZone, normalizedName, err := normalizeLookup(zone, name)
 	if err != nil {
 		return nil, err
@@ -241,7 +247,7 @@ func (s *BboltStore) lookupByPrefix(ctx context.Context, prefix string, qclass u
 	return records, nil
 }
 
-func normalizeLookup(zone string, name string) (string, string, error) {
+func normalizeLookup(zone, name string) (string, string, error) {
 	normalizedZone, err := NormalizeZoneName(zone)
 	if err != nil {
 		return "", "", oops.In("dnsserver").

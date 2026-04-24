@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/miekg/dns"
-	"github.com/samber/lo"
 	"github.com/samber/oops"
 )
 
@@ -14,7 +13,7 @@ func (s *Server) serveDNS(writer dns.ResponseWriter, request *dns.Msg) {
 		if s.resolver == nil {
 			reply := new(dns.Msg)
 			reply.SetRcode(request, dns.RcodeRefused)
-			_ = writer.WriteMsg(reply)
+			writeDNSMessage(s.logger, writer, reply)
 			return
 		}
 		s.resolver.ServeDNS(writer, request)
@@ -23,7 +22,7 @@ func (s *Server) serveDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	default:
 		reply := new(dns.Msg)
 		reply.SetRcode(request, dns.RcodeNotImplemented)
-		_ = writer.WriteMsg(reply)
+		writeDNSMessage(s.logger, writer, reply)
 	}
 }
 
@@ -35,38 +34,38 @@ func (s *Server) serveUpdate(writer dns.ResponseWriter, request *dns.Msg) {
 
 	if s.repo == nil {
 		reply.Rcode = dns.RcodeRefused
-		_ = writer.WriteMsg(reply)
+		writeDNSMessage(s.logger, writer, reply)
 		return
 	}
 
 	if len(request.Question) != 1 || request.Question[0].Qclass != dns.ClassINET || request.Question[0].Qtype != dns.TypeSOA {
 		reply.Rcode = dns.RcodeFormatError
-		_ = writer.WriteMsg(reply)
+		writeDNSMessage(s.logger, writer, reply)
 		return
 	}
 
 	zone, err := NormalizeZoneName(request.Question[0].Name)
 	if err != nil {
 		reply.Rcode = dns.RcodeFormatError
-		_ = writer.WriteMsg(reply)
+		writeDNSMessage(s.logger, writer, reply)
 		return
 	}
 
 	if len(request.Answer) > 0 {
 		reply.Rcode = dns.RcodeNotImplemented
-		_ = writer.WriteMsg(reply)
+		writeDNSMessage(s.logger, writer, reply)
 		return
 	}
 
 	if err := s.applyUpdate(context.Background(), zone, request.Ns); err != nil {
 		s.logger.Error("dns update failed", "zone", zone, "err", err)
 		reply.Rcode = dns.RcodeServerFailure
-		_ = writer.WriteMsg(reply)
+		writeDNSMessage(s.logger, writer, reply)
 		return
 	}
 
 	reply.Rcode = dns.RcodeSuccess
-	_ = writer.WriteMsg(reply)
+	writeDNSMessage(s.logger, writer, reply)
 }
 
 func (s *Server) applyUpdate(ctx context.Context, zone string, updates []dns.RR) error {
@@ -92,17 +91,21 @@ func (s *Server) applyUpdateRR(ctx context.Context, zone string, update dns.RR) 
 			return err
 		}
 		record.Class = dns.ClassINET
-		return s.repo.DeleteRecord(ctx, record)
+		return oops.In("dnsserver").
+			With("op", "apply_update_delete_record", "zone", zone, "name", record.Name, "type", record.Type).
+			Wrapf(s.repo.DeleteRecord(ctx, record), "delete record from update")
 	default:
 		record, err := RecordFromRR(zone, update)
 		if err != nil {
 			return err
 		}
-		return s.repo.SaveRecord(ctx, record)
+		return oops.In("dnsserver").
+			With("op", "apply_update_save_record", "zone", zone, "name", record.Name, "type", record.Type).
+			Wrapf(s.repo.SaveRecord(ctx, record), "save record from update")
 	}
 }
 
-func (s *Server) deleteName(ctx context.Context, zone string, name string) error {
+func (s *Server) deleteName(ctx context.Context, zone, name string) error {
 	records, err := s.repo.LookupAll(ctx, zone, name, dns.ClassANY)
 	if err != nil {
 		return oops.In("dnsserver").
@@ -110,15 +113,18 @@ func (s *Server) deleteName(ctx context.Context, zone string, name string) error
 			Wrapf(err, "lookup records for delete name")
 	}
 
-	return lo.Reduce(records, func(acc error, record Record, _ int) error {
-		if acc != nil {
-			return acc
+	for _, record := range records {
+		if err := s.repo.DeleteRecord(ctx, record); err != nil {
+			return oops.In("dnsserver").
+				With("op", "delete_name_record", "zone", zone, "name", name, "record_name", record.Name, "type", record.Type).
+				Wrapf(err, "delete record for name")
 		}
-		return s.repo.DeleteRecord(ctx, record)
-	}, nil)
+	}
+
+	return nil
 }
 
-func (s *Server) deleteRRSet(ctx context.Context, zone string, name string, rrtype uint16) error {
+func (s *Server) deleteRRSet(ctx context.Context, zone, name string, rrtype uint16) error {
 	records, err := s.repo.Lookup(ctx, zone, name, rrtype, dns.ClassANY)
 	if err != nil {
 		return oops.In("dnsserver").
@@ -126,10 +132,13 @@ func (s *Server) deleteRRSet(ctx context.Context, zone string, name string, rrty
 			Wrapf(err, "lookup rrset for delete")
 	}
 
-	return lo.Reduce(records, func(acc error, record Record, _ int) error {
-		if acc != nil {
-			return acc
+	for _, record := range records {
+		if err := s.repo.DeleteRecord(ctx, record); err != nil {
+			return oops.In("dnsserver").
+				With("op", "delete_rrset_record", "zone", zone, "name", name, "type", rrtype, "record_name", record.Name).
+				Wrapf(err, "delete record for rrset")
 		}
-		return s.repo.DeleteRecord(ctx, record)
-	}, nil)
+	}
+
+	return nil
 }

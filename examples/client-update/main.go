@@ -1,3 +1,4 @@
+// Package main demonstrates RFC2136 updates with dnsclient against a running dnsserver.
 package main
 
 import (
@@ -18,11 +19,11 @@ func main() {
 
 	workdir, err := os.MkdirTemp("", "dnsx-example-client-*")
 	must(err)
-	defer os.RemoveAll(workdir)
+	defer func() { must(os.RemoveAll(workdir)) }()
 
 	store, err := dnsserver.OpenBboltStore(filepath.Join(workdir, "dnsx.db"), logger)
 	must(err)
-	defer store.Close()
+	defer func() { must(store.Close()) }()
 
 	server := dnsserver.NewServerWithRepository(
 		dnsserver.Config{Listen: "127.0.0.1:0"},
@@ -30,7 +31,7 @@ func main() {
 		dnsserver.WithLogger(logger),
 	)
 	must(server.Start(ctx))
-	defer server.Stop(ctx)
+	defer func() { must(server.Stop(ctx)) }()
 
 	client := dnsclient.NewClient(server.UDPAddr())
 	record, err := dns.NewRR("ops.example.com. 60 IN A 10.0.0.31")
@@ -38,19 +39,24 @@ func main() {
 
 	updateResponse, _, err := client.UpdateAdd(ctx, "example.com", record)
 	must(err)
-	fmt.Printf("update rcode: %s\n", dns.RcodeToString[updateResponse.Rcode])
+	mustPrint("update rcode: %s\n", dns.RcodeToString[updateResponse.Rcode])
 
 	answer, err := client.Lookup(ctx, "ops.example.com", dns.TypeA)
 	must(err)
-	fmt.Printf("answer count: %d\n", len(answer))
+	mustPrint("answer count: %d\n", len(answer))
 
 	deleteResponse, _, err := client.UpdateRemove(ctx, "example.com", record)
 	must(err)
-	fmt.Printf("delete rcode: %s\n", dns.RcodeToString[deleteResponse.Rcode])
+	mustPrint("delete rcode: %s\n", dns.RcodeToString[deleteResponse.Rcode])
 }
 
 func must(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func mustPrint(format string, values ...any) {
+	_, err := fmt.Printf(format, values...)
+	must(err)
 }
