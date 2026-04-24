@@ -2,7 +2,6 @@ package dnsserver
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"slices"
@@ -13,6 +12,7 @@ import (
 	"github.com/arcgolabs/storx/codec"
 	"github.com/arcgolabs/storx/keycodec"
 	"github.com/miekg/dns"
+	"github.com/samber/oops"
 )
 
 const (
@@ -31,7 +31,9 @@ type BboltStore struct {
 func OpenBboltStore(path string, logger *slog.Logger) (*BboltStore, error) {
 	db, err := bboltx.Open(path, 0o600, nil, bboltx.WithDBLogger(logger))
 	if err != nil {
-		return nil, fmt.Errorf("open bbolt store: %w", err)
+		return nil, oops.In("dnsserver").
+			With("op", "open_bbolt_store", "path", path).
+			Wrapf(err, "open bbolt store")
 	}
 
 	return NewBboltStore(db), nil
@@ -74,11 +76,15 @@ func (s *BboltStore) Close() error {
 func (s *BboltStore) SaveZone(ctx context.Context, zone Zone) error {
 	normalized, err := NormalizeZoneName(zone.Name)
 	if err != nil {
-		return fmt.Errorf("save zone: %w", err)
+		return oops.In("dnsserver").
+			With("op", "save_zone", "zone", zone.Name).
+			Wrapf(err, "normalize zone")
 	}
 
 	if err := s.zones.Put(ctx, normalized, Zone{Name: normalized}); err != nil {
-		return fmt.Errorf("save zone %q: %w", normalized, err)
+		return oops.In("dnsserver").
+			With("op", "save_zone", "zone", normalized).
+			Wrapf(err, "save zone")
 	}
 
 	s.revision.Add(1)
@@ -88,11 +94,15 @@ func (s *BboltStore) SaveZone(ctx context.Context, zone Zone) error {
 func (s *BboltStore) DeleteZone(ctx context.Context, zone string) error {
 	normalized, err := NormalizeZoneName(zone)
 	if err != nil {
-		return fmt.Errorf("delete zone: %w", err)
+		return oops.In("dnsserver").
+			With("op", "delete_zone", "zone", zone).
+			Wrapf(err, "normalize zone")
 	}
 
 	if err := s.zones.Delete(ctx, normalized); err != nil {
-		return fmt.Errorf("delete zone %q: %w", normalized, err)
+		return oops.In("dnsserver").
+			With("op", "delete_zone", "zone", normalized).
+			Wrapf(err, "delete zone")
 	}
 
 	prefix := normalized + "|"
@@ -113,7 +123,9 @@ func (s *BboltStore) DeleteZone(ctx context.Context, zone string) error {
 
 		return nil
 	}); err != nil {
-		return fmt.Errorf("delete zone records %q: %w", normalized, err)
+		return oops.In("dnsserver").
+			With("op", "delete_zone_records", "zone", normalized).
+			Wrapf(err, "delete zone records")
 	}
 
 	s.revision.Add(1)
@@ -128,7 +140,9 @@ func (s *BboltStore) ListZones(ctx context.Context) ([]Zone, error) {
 			return nil
 		})
 	}); err != nil {
-		return nil, fmt.Errorf("list zones: %w", err)
+		return nil, oops.In("dnsserver").
+			With("op", "list_zones").
+			Wrapf(err, "list zones")
 	}
 
 	sort.Slice(zones, func(i int, j int) bool {
@@ -141,7 +155,9 @@ func (s *BboltStore) ListZones(ctx context.Context) ([]Zone, error) {
 func (s *BboltStore) SaveRecord(ctx context.Context, record Record) error {
 	normalized, err := NormalizeRecord(record)
 	if err != nil {
-		return fmt.Errorf("save record: %w", err)
+		return oops.In("dnsserver").
+			With("op", "save_record", "zone", record.Zone, "name", record.Name, "type", record.Type).
+			Wrapf(err, "normalize record")
 	}
 
 	if err := s.SaveZone(ctx, Zone{Name: normalized.Zone}); err != nil {
@@ -149,7 +165,9 @@ func (s *BboltStore) SaveRecord(ctx context.Context, record Record) error {
 	}
 
 	if err := s.records.Put(ctx, normalized.Key(), normalized); err != nil {
-		return fmt.Errorf("save record %q: %w", normalized.Key(), err)
+		return oops.In("dnsserver").
+			With("op", "save_record", "key", normalized.Key()).
+			Wrapf(err, "save record")
 	}
 
 	s.revision.Add(1)
@@ -159,11 +177,15 @@ func (s *BboltStore) SaveRecord(ctx context.Context, record Record) error {
 func (s *BboltStore) DeleteRecord(ctx context.Context, record Record) error {
 	normalized, err := NormalizeRecord(record)
 	if err != nil {
-		return fmt.Errorf("delete record: %w", err)
+		return oops.In("dnsserver").
+			With("op", "delete_record", "zone", record.Zone, "name", record.Name, "type", record.Type).
+			Wrapf(err, "normalize record")
 	}
 
 	if err := s.records.Delete(ctx, normalized.Key()); err != nil {
-		return fmt.Errorf("delete record %q: %w", normalized.Key(), err)
+		return oops.In("dnsserver").
+			With("op", "delete_record", "key", normalized.Key()).
+			Wrapf(err, "delete record")
 	}
 
 	s.revision.Add(1)
@@ -200,7 +222,9 @@ func (s *BboltStore) lookupByPrefix(ctx context.Context, prefix string, qclass u
 			return nil
 		})
 	}); err != nil {
-		return nil, fmt.Errorf("lookup records by prefix %q: %w", prefix, err)
+		return nil, oops.In("dnsserver").
+			With("op", "lookup_by_prefix", "prefix", prefix, "class", qclass).
+			Wrapf(err, "lookup records by prefix")
 	}
 
 	slices.SortFunc(records, func(left Record, right Record) int {
@@ -220,12 +244,16 @@ func (s *BboltStore) lookupByPrefix(ctx context.Context, prefix string, qclass u
 func normalizeLookup(zone string, name string) (string, string, error) {
 	normalizedZone, err := NormalizeZoneName(zone)
 	if err != nil {
-		return "", "", fmt.Errorf("normalize lookup zone: %w", err)
+		return "", "", oops.In("dnsserver").
+			With("op", "normalize_lookup", "zone", zone, "name", name).
+			Wrapf(err, "normalize lookup zone")
 	}
 
 	normalizedName := dns.Fqdn(name)
 	if !dns.IsSubDomain(normalizedZone, normalizedName) {
-		return "", "", fmt.Errorf("lookup name %q is outside zone %q", normalizedName, normalizedZone)
+		return "", "", oops.In("dnsserver").
+			With("op", "normalize_lookup", "zone", normalizedZone, "name", normalizedName).
+			Errorf("lookup name %q is outside zone %q", normalizedName, normalizedZone)
 	}
 
 	return normalizedZone, normalizedName, nil
@@ -238,7 +266,9 @@ var _ interface{ Close() error } = (*BboltStore)(nil)
 func MustOpenBboltStore(path string) *BboltStore {
 	store, err := OpenBboltStore(path, slog.New(slog.NewTextHandler(os.Stdout, nil)))
 	if err != nil {
-		panic(err)
+		panic(oops.In("dnsserver").
+			With("op", "must_open_bbolt_store", "path", path).
+			Wrapf(err, "open bbolt store"))
 	}
 
 	return store

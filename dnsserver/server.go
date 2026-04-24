@@ -12,6 +12,7 @@ import (
 	"github.com/arcgolabs/dnsx/dnsclient"
 	"github.com/miekg/dns"
 	"github.com/samber/lo"
+	"github.com/samber/oops"
 )
 
 type Config struct {
@@ -107,11 +108,15 @@ func WithHandler(handler dns.Handler) Option {
 
 func (s *Server) Start(context.Context) error {
 	if s == nil {
-		return errors.New("dns server is nil")
+		return oops.In("dnsserver").
+			With("op", "start_server").
+			New("dns server is nil")
 	}
 	s.ensureHandler()
 	if s.handler == nil {
-		return errors.New("dns handler is nil")
+		return oops.In("dnsserver").
+			With("op", "start_server", "listen", s.config.Listen).
+			New("dns handler is nil")
 	}
 
 	var startErr error
@@ -201,6 +206,9 @@ func (s *Server) Repository() Repository {
 
 func (s *Server) Client(opts ...dnsclient.Option) *dnsclient.Client {
 	base := append([]dnsclient.Option(nil), s.clientOpts...)
+	if s != nil && s.logger != nil {
+		base = append(base, dnsclient.WithLogger(s.logger))
+	}
 	return dnsclient.NewClient(s.clientTarget(), append(base, opts...)...)
 }
 

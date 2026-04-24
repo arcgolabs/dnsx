@@ -8,6 +8,7 @@ import (
 	"github.com/arcgolabs/dix"
 	"github.com/arcgolabs/dnsx/dnsserver"
 	"github.com/arcgolabs/logx"
+	"github.com/samber/oops"
 )
 
 func newApp(cfg Config) *dix.App {
@@ -90,7 +91,9 @@ func newLogger(cfg Config) (*slog.Logger, error) {
 func openStore(cfg Config, logger *slog.Logger) (*dnsserver.BboltStore, error) {
 	store, err := dnsserver.OpenBboltStore(cfg.Storage.Path, logger)
 	if err != nil {
-		return nil, err
+		return nil, oops.In("cmd/server").
+			With("op", "open_store", "path", cfg.Storage.Path).
+			Wrapf(err, "open dns store")
 	}
 
 	if cfg.Seed.File == "" {
@@ -100,11 +103,15 @@ func openStore(cfg Config, logger *slog.Logger) (*dnsserver.BboltStore, error) {
 	seed, err := dnsserver.LoadSeedData(cfg.Seed.File)
 	if err != nil {
 		_ = store.Close()
-		return nil, err
+		return nil, oops.In("cmd/server").
+			With("op", "load_seed", "path", cfg.Seed.File).
+			Wrapf(err, "load seed data")
 	}
 	if err := dnsserver.ApplySeedData(context.Background(), store, seed); err != nil {
 		_ = store.Close()
-		return nil, err
+		return nil, oops.In("cmd/server").
+			With("op", "apply_seed", "path", cfg.Seed.File).
+			Wrapf(err, "apply seed data")
 	}
 
 	return store, nil

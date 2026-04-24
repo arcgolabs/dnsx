@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
 	"github.com/arcgolabs/configx"
 	"github.com/samber/lo"
 	"github.com/samber/mo"
+	"github.com/samber/oops"
 	"github.com/spf13/pflag"
 )
 
@@ -68,7 +68,9 @@ func loadConfig(args []string) (Config, error) {
 
 	cfg, err := configx.LoadTErr[Config](options...)
 	if err != nil {
-		return Config{}, fmt.Errorf("load config with configx: %w", err)
+		return Config{}, oops.In("cmd/server").
+			With("op", "load_config", "config_file", configFile).
+			Wrapf(err, "load config with configx")
 	}
 
 	cfg.Config = configFile

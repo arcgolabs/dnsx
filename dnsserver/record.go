@@ -9,6 +9,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/samber/lo"
+	"github.com/samber/oops"
 )
 
 type Zone struct {
@@ -27,7 +28,9 @@ type Record struct {
 func NormalizeZoneName(name string) (string, error) {
 	normalized := dns.Fqdn(strings.TrimSpace(strings.ToLower(name)))
 	if normalized == "." {
-		return "", fmt.Errorf("zone name is required")
+		return "", oops.In("dnsserver").
+			With("op", "normalize_zone_name").
+			New("zone name is required")
 	}
 
 	return normalized, nil
@@ -36,15 +39,21 @@ func NormalizeZoneName(name string) (string, error) {
 func NormalizeRecord(record Record) (Record, error) {
 	zone, err := NormalizeZoneName(record.Zone)
 	if err != nil {
-		return Record{}, fmt.Errorf("normalize zone: %w", err)
+		return Record{}, oops.In("dnsserver").
+			With("op", "normalize_record", "zone", record.Zone, "name", record.Name, "type", record.Type).
+			Wrapf(err, "normalize record zone")
 	}
 
 	name := dns.Fqdn(strings.TrimSpace(strings.ToLower(record.Name)))
 	if name == "." {
-		return Record{}, fmt.Errorf("record name is required")
+		return Record{}, oops.In("dnsserver").
+			With("op", "normalize_record", "zone", zone).
+			New("record name is required")
 	}
 	if !dns.IsSubDomain(zone, name) {
-		return Record{}, fmt.Errorf("record %q is outside zone %q", name, zone)
+		return Record{}, oops.In("dnsserver").
+			With("op", "normalize_record", "zone", zone, "name", name).
+			Errorf("record %q is outside zone %q", name, zone)
 	}
 
 	record.Zone = zone
@@ -52,10 +61,14 @@ func NormalizeRecord(record Record) (Record, error) {
 	record.Class = lo.Ternary(record.Class == 0, uint16(dns.ClassINET), record.Class)
 	record.Data = strings.TrimSpace(record.Data)
 	if record.Data == "" {
-		return Record{}, fmt.Errorf("record data is required")
+		return Record{}, oops.In("dnsserver").
+			With("op", "normalize_record", "zone", zone, "name", name, "type", record.Type).
+			New("record data is required")
 	}
 	if record.Type == 0 {
-		return Record{}, fmt.Errorf("record type is required")
+		return Record{}, oops.In("dnsserver").
+			With("op", "normalize_record", "zone", zone, "name", name).
+			New("record type is required")
 	}
 
 	return record, nil
@@ -114,12 +127,16 @@ func (r Record) CNAME() string {
 
 func RecordFromRR(zone string, rr dns.RR) (Record, error) {
 	if rr == nil {
-		return Record{}, fmt.Errorf("dns rr is nil")
+		return Record{}, oops.In("dnsserver").
+			With("op", "record_from_rr").
+			New("dns rr is nil")
 	}
 
 	fields := strings.Fields(rr.String())
 	if len(fields) < 5 {
-		return Record{}, fmt.Errorf("dns rr %q is missing rdata", rr.String())
+		return Record{}, oops.In("dnsserver").
+			With("op", "record_from_rr", "rr", rr.String()).
+			Errorf("dns rr %q is missing rdata", rr.String())
 	}
 
 	record := Record{

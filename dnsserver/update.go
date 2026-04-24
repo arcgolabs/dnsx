@@ -2,10 +2,10 @@ package dnsserver
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/miekg/dns"
 	"github.com/samber/lo"
+	"github.com/samber/oops"
 )
 
 func (s *Server) serveDNS(writer dns.ResponseWriter, request *dns.Msg) {
@@ -105,7 +105,9 @@ func (s *Server) applyUpdateRR(ctx context.Context, zone string, update dns.RR) 
 func (s *Server) deleteName(ctx context.Context, zone string, name string) error {
 	records, err := s.repo.LookupAll(ctx, zone, name, dns.ClassANY)
 	if err != nil {
-		return fmt.Errorf("lookup records for delete name %q: %w", name, err)
+		return oops.In("dnsserver").
+			With("op", "delete_name", "zone", zone, "name", name).
+			Wrapf(err, "lookup records for delete name")
 	}
 
 	return lo.Reduce(records, func(acc error, record Record, _ int) error {
@@ -119,7 +121,9 @@ func (s *Server) deleteName(ctx context.Context, zone string, name string) error
 func (s *Server) deleteRRSet(ctx context.Context, zone string, name string, rrtype uint16) error {
 	records, err := s.repo.Lookup(ctx, zone, name, rrtype, dns.ClassANY)
 	if err != nil {
-		return fmt.Errorf("lookup rrset for delete %q type=%d: %w", name, rrtype, err)
+		return oops.In("dnsserver").
+			With("op", "delete_rrset", "zone", zone, "name", name, "type", rrtype).
+			Wrapf(err, "lookup rrset for delete")
 	}
 
 	return lo.Reduce(records, func(acc error, record Record, _ int) error {
