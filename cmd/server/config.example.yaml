@@ -1,0 +1,20 @@
+server:
+  listen: ":5354"
+
+storage:
+  path: "dnsx.db"
+
+seed:
+  file: ""
+
+log:
+  console: true
+  level: "info"
+  file: ""
+
+cache:
+  capacity: 1024
+  algorithm: "lru"
+  janitor: false
+  missing_capacity: 0
+  missing_algorithm: ""
