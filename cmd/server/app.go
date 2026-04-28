@@ -35,6 +35,7 @@ func newApp(cfg Config) *dix.App {
 		dix.Providers(
 			dix.ProviderErr2(openStore),
 			dix.Provider3(newResolver),
+			dix.Provider2(newManager),
 		),
 		dix.Hooks(
 			dix.OnStop(func(_ context.Context, store *dnsserver.BboltStore) error {
@@ -47,7 +48,7 @@ func newApp(cfg Config) *dix.App {
 		dix.Imports(configModule, logModule, infraModule),
 		dix.Providers(
 			dix.Provider1(newServerConfig),
-			dix.Provider2(newDNSServer),
+			dix.Provider4(newDNSServer),
 		),
 		dix.Hooks(
 			dix.OnStart(func(ctx context.Context, server *dnsserver.Server) error {
@@ -59,9 +60,25 @@ func newApp(cfg Config) *dix.App {
 		),
 	)
 
+	adminModule := dix.NewModule("admin",
+		dix.Imports(configModule, logModule, infraModule),
+		dix.Providers(
+			dix.Provider1(newHTTPConfig),
+			dix.Provider3(newAdminServer),
+		),
+		dix.Hooks(
+			dix.OnStart(func(ctx context.Context, server *adminServer) error {
+				return server.Start(ctx)
+			}),
+			dix.OnStop(func(ctx context.Context, server *adminServer) error {
+				return server.Stop(ctx)
+			}),
+		),
+	)
+
 	return dix.New(
 		"dnsx-server",
-		dix.Modules(configModule, logModule, infraModule, serverModule),
+		dix.Modules(configModule, logModule, infraModule, serverModule, adminModule),
 	)
 }
 
@@ -144,14 +161,32 @@ func newResolver(cfg Config, store *dnsserver.BboltStore, logger *slog.Logger) *
 	)
 }
 
+func newManager(store *dnsserver.BboltStore, logger *slog.Logger) *dnsserver.Manager {
+	return dnsserver.NewManager(store, dnsserver.WithManagerLogger(logger))
+}
+
 func newServerConfig(cfg Config) dnsserver.Config {
 	return dnsserver.Config{
 		Listen: cfg.Server.Listen,
 	}
 }
 
-func newDNSServer(cfg dnsserver.Config, resolver *dnsserver.Resolver) *dnsserver.Server {
-	return dnsserver.NewServerWithResolver(cfg, resolver)
+func newHTTPConfig(cfg Config) HTTPConfig {
+	return cfg.HTTP
+}
+
+func newDNSServer(
+	cfg dnsserver.Config,
+	resolver *dnsserver.Resolver,
+	manager *dnsserver.Manager,
+	logger *slog.Logger,
+) *dnsserver.Server {
+	return dnsserver.NewServerWithResolver(
+		cfg,
+		resolver,
+		dnsserver.WithManager(manager),
+		dnsserver.WithLogger(logger),
+	)
 }
 
 func isDebug(logger *slog.Logger) bool {

@@ -14,6 +14,7 @@ import (
 type Config struct {
 	Config  string        `validate:"-"`
 	Server  ServerConfig  `validate:"required"`
+	HTTP    HTTPConfig    `validate:"-"`
 	Storage StorageConfig `validate:"required"`
 	Seed    SeedConfig    `validate:"-"`
 	Log     LogConfig     `validate:"required"`
@@ -22,6 +23,10 @@ type Config struct {
 
 type ServerConfig struct {
 	Listen string `validate:"required"`
+}
+
+type HTTPConfig struct {
+	Listen string `validate:"-"`
 }
 
 type StorageConfig struct {
@@ -85,6 +90,7 @@ func newFlagSet() *pflag.FlagSet {
 
 	flagSet.String("config", "", "optional config file path")
 	flagSet.String("server-listen", "", "DNS listen address for both UDP and TCP")
+	flagSet.String("http-listen", "", "optional HTTP admin listen address")
 	flagSet.String("storage-path", "", "bbolt data path")
 	flagSet.String("seed-file", "", "optional JSON seed file")
 	flagSet.Bool("log-console", false, "enable console logging")
@@ -103,6 +109,9 @@ func defaultConfig() Config {
 	return Config{
 		Server: ServerConfig{
 			Listen: ":5354",
+		},
+		HTTP: HTTPConfig{
+			Listen: "",
 		},
 		Storage: StorageConfig{
 			Path: "dnsx.db",

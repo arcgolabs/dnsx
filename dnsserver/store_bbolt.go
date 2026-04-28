@@ -4,14 +4,12 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"slices"
 	"sort"
 	"sync/atomic"
 
 	"github.com/arcgolabs/storx/bboltx"
 	"github.com/arcgolabs/storx/codec"
 	"github.com/arcgolabs/storx/keycodec"
-	"github.com/miekg/dns"
 	"github.com/samber/oops"
 )
 
@@ -196,73 +194,6 @@ func (s *BboltStore) DeleteRecord(ctx context.Context, record Record) error {
 
 	s.revision.Add(1)
 	return nil
-}
-
-func (s *BboltStore) Lookup(ctx context.Context, zone, name string, qtype, qclass uint16) ([]Record, error) {
-	normalizedZone, normalizedName, err := normalizeLookup(zone, name)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.lookupByPrefix(ctx, RecordPrefix(normalizedZone, normalizedName, qtype), qclass)
-}
-
-func (s *BboltStore) LookupAll(ctx context.Context, zone, name string, qclass uint16) ([]Record, error) {
-	normalizedZone, normalizedName, err := normalizeLookup(zone, name)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.lookupByPrefix(ctx, RecordPrefix(normalizedZone, normalizedName, dns.TypeANY), qclass)
-}
-
-func (s *BboltStore) lookupByPrefix(ctx context.Context, prefix string, qclass uint16) ([]Record, error) {
-	records := make([]Record, 0)
-	if err := s.records.View(ctx, func(tx bboltx.ViewTx[string, Record]) error {
-		return tx.ScanPrefix([]byte(prefix), func(_ string, record Record) error {
-			if qclass != dns.ClassANY && record.Class != qclass {
-				return nil
-			}
-
-			records = append(records, record)
-			return nil
-		})
-	}); err != nil {
-		return nil, oops.In("dnsserver").
-			With("op", "lookup_by_prefix", "prefix", prefix, "class", qclass).
-			Wrapf(err, "lookup records by prefix")
-	}
-
-	slices.SortFunc(records, func(left Record, right Record) int {
-		switch {
-		case left.Data < right.Data:
-			return -1
-		case left.Data > right.Data:
-			return 1
-		default:
-			return 0
-		}
-	})
-
-	return records, nil
-}
-
-func normalizeLookup(zone, name string) (string, string, error) {
-	normalizedZone, err := NormalizeZoneName(zone)
-	if err != nil {
-		return "", "", oops.In("dnsserver").
-			With("op", "normalize_lookup", "zone", zone, "name", name).
-			Wrapf(err, "normalize lookup zone")
-	}
-
-	normalizedName := dns.Fqdn(name)
-	if !dns.IsSubDomain(normalizedZone, normalizedName) {
-		return "", "", oops.In("dnsserver").
-			With("op", "normalize_lookup", "zone", normalizedZone, "name", normalizedName).
-			Errorf("lookup name %q is outside zone %q", normalizedName, normalizedZone)
-	}
-
-	return normalizedZone, normalizedName, nil
 }
 
 var _ Repository = (*BboltStore)(nil)

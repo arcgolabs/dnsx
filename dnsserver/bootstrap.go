@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	collectionset "github.com/arcgolabs/collectionx/set"
+	"github.com/arcgolabs/collectionx"
 	"github.com/miekg/dns"
 	"github.com/samber/oops"
 )
@@ -54,8 +54,8 @@ func ApplySeedData(ctx context.Context, repo Repository, seed SeedData) error {
 	return saveSeedRecords(ctx, repo, records)
 }
 
-func collectSeedZones(seed SeedData) (*collectionset.OrderedSet[string], error) {
-	zoneNames := collectionset.NewOrderedSet[string]()
+func collectSeedZones(seed SeedData) (collectionx.OrderedSet[string], error) {
+	zoneNames := collectionx.NewOrderedSet[string]()
 
 	for _, zone := range seed.Zones {
 		normalized, err := NormalizeZoneName(zone.Name)
@@ -71,9 +71,9 @@ func collectSeedZones(seed SeedData) (*collectionset.OrderedSet[string], error) 
 	return zoneNames, nil
 }
 
-func collectSeedRecords(seed SeedData, zoneNames *collectionset.OrderedSet[string]) ([]Record, error) {
+func collectSeedRecords(seed SeedData, zoneNames collectionx.OrderedSet[string]) ([]Record, error) {
 	records := make([]Record, 0, len(seed.Records))
-	recordKeys := collectionset.NewOrderedSet[string]()
+	recordKeys := collectionx.NewOrderedSet[string]()
 
 	for _, record := range seed.Records {
 		normalized, err := NormalizeRecord(record)

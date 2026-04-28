@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	collectionset "github.com/arcgolabs/collectionx/set"
+	"github.com/arcgolabs/collectionx"
 	"github.com/miekg/dns"
 	"github.com/samber/lo"
 	"github.com/samber/mo"
@@ -219,7 +219,7 @@ func (r *Resolver) listZones(ctx context.Context) ([]Zone, error) {
 }
 
 func uniqueSortedZoneNames(zones []Zone) []string {
-	zoneSet := collectionset.NewOrderedSet[string]()
+	zoneSet := collectionx.NewOrderedSet[string]()
 	lo.ForEach(zones, func(zone Zone, _ int) {
 		zoneSet.Add(zone.Name)
 	})

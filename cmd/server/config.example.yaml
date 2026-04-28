@@ -1,6 +1,9 @@
 server:
   listen: ":5354"
 
+http:
+  listen: ""
+
 storage:
   path: "dnsx.db"
 

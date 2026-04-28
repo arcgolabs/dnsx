@@ -80,29 +80,76 @@ func (s *Server) applyUpdate(ctx context.Context, zone string, updates []dns.RR)
 
 func (s *Server) applyUpdateRR(ctx context.Context, zone string, update dns.RR) error {
 	header := update.Header()
-	switch {
-	case header.Class == dns.ClassANY && header.Rrtype == dns.TypeANY:
+	switch header.Class {
+	case dns.ClassANY:
+		return s.applyAnyClassUpdate(ctx, zone, header)
+	case dns.ClassNONE:
+		return s.applyDeleteRecordUpdate(ctx, zone, update)
+	default:
+		return s.applySaveRecordUpdate(ctx, zone, update)
+	}
+}
+
+func (s *Server) applyAnyClassUpdate(ctx context.Context, zone string, header *dns.RR_Header) error {
+	if header.Rrtype == dns.TypeANY {
 		return s.deleteName(ctx, zone, header.Name)
-	case header.Class == dns.ClassANY:
-		return s.deleteRRSet(ctx, zone, header.Name, header.Rrtype)
-	case header.Class == dns.ClassNONE:
-		record, err := RecordFromRR(zone, update)
-		if err != nil {
-			return err
-		}
-		record.Class = dns.ClassINET
+	}
+
+	return s.deleteRRSet(ctx, zone, header.Name, header.Rrtype)
+}
+
+func (s *Server) applyDeleteRecordUpdate(ctx context.Context, zone string, update dns.RR) error {
+	record, err := RecordFromRR(zone, update)
+	if err != nil {
+		return err
+	}
+
+	record.Class = dns.ClassINET
+	deleteRecordErr := s.deleteRecord(ctx, record)
+	if deleteRecordErr != nil {
 		return oops.In("dnsserver").
 			With("op", "apply_update_delete_record", "zone", zone, "name", record.Name, "type", record.Type).
-			Wrapf(s.repo.DeleteRecord(ctx, record), "delete record from update")
-	default:
-		record, err := RecordFromRR(zone, update)
-		if err != nil {
-			return err
-		}
+			Wrapf(deleteRecordErr, "delete record from update")
+	}
+
+	return nil
+}
+
+func (s *Server) applySaveRecordUpdate(ctx context.Context, zone string, update dns.RR) error {
+	record, err := RecordFromRR(zone, update)
+	if err != nil {
+		return err
+	}
+
+	saveRecordErr := s.saveRecord(ctx, record)
+	if saveRecordErr != nil {
 		return oops.In("dnsserver").
 			With("op", "apply_update_save_record", "zone", zone, "name", record.Name, "type", record.Type).
-			Wrapf(s.repo.SaveRecord(ctx, record), "save record from update")
+			Wrapf(saveRecordErr, "save record from update")
 	}
+
+	return nil
+}
+
+func (s *Server) saveRecord(ctx context.Context, record Record) error {
+	if s.manager != nil {
+		_, err := s.manager.UpsertRecord(ctx, record)
+		return err
+	}
+
+	return oops.In("dnsserver").
+		With("op", "save_record_helper", "zone", record.Zone, "name", record.Name, "type", record.Type).
+		Wrapf(s.repo.SaveRecord(ctx, record), "save record with repository")
+}
+
+func (s *Server) deleteRecord(ctx context.Context, record Record) error {
+	if s.manager != nil {
+		return s.manager.DeleteRecord(ctx, record)
+	}
+
+	return oops.In("dnsserver").
+		With("op", "delete_record_helper", "zone", record.Zone, "name", record.Name, "type", record.Type).
+		Wrapf(s.repo.DeleteRecord(ctx, record), "delete record with repository")
 }
 
 func (s *Server) deleteName(ctx context.Context, zone, name string) error {
@@ -114,10 +161,11 @@ func (s *Server) deleteName(ctx context.Context, zone, name string) error {
 	}
 
 	for _, record := range records {
-		if err := s.repo.DeleteRecord(ctx, record); err != nil {
+		deleteErr := s.deleteRecord(ctx, record)
+		if deleteErr != nil {
 			return oops.In("dnsserver").
 				With("op", "delete_name_record", "zone", zone, "name", name, "record_name", record.Name, "type", record.Type).
-				Wrapf(err, "delete record for name")
+				Wrapf(deleteErr, "delete record for name")
 		}
 	}
 
@@ -133,10 +181,11 @@ func (s *Server) deleteRRSet(ctx context.Context, zone, name string, rrtype uint
 	}
 
 	for _, record := range records {
-		if err := s.repo.DeleteRecord(ctx, record); err != nil {
+		deleteErr := s.deleteRecord(ctx, record)
+		if deleteErr != nil {
 			return oops.In("dnsserver").
 				With("op", "delete_rrset_record", "zone", zone, "name", name, "type", rrtype, "record_name", record.Name).
-				Wrapf(err, "delete record for rrset")
+				Wrapf(deleteErr, "delete record for rrset")
 		}
 	}
 

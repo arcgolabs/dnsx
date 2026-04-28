@@ -19,6 +19,7 @@ type Server struct {
 	config      Config
 	logger      *slog.Logger
 	repo        Repository
+	manager     *Manager
 	resolver    *Resolver
 	handler     dns.Handler
 	clientOpts  []dnsclient.Option
@@ -45,6 +46,7 @@ func NewServer(config Config, handler dns.Handler, opts ...Option) *Server {
 		}
 	}
 
+	server.syncManagedComponents()
 	return server
 }
 
@@ -54,17 +56,14 @@ func NewServerWithResolver(config Config, resolver *Resolver, opts ...Option) *S
 	if resolver != nil {
 		server.repo = resolver.Repository()
 	}
-	server.ensureHandler()
+	server.syncManagedComponents()
 	return server
 }
 
 func NewServerWithRepository(config Config, repo Repository, opts ...Option) *Server {
 	server := NewServer(config, nil, opts...)
 	server.repo = repo
-	if server.resolver == nil && repo != nil {
-		server.resolver = NewResolver(repo)
-	}
-	server.ensureHandler()
+	server.syncManagedComponents()
 	return server
 }
 
@@ -72,6 +71,15 @@ func WithLogger(logger *slog.Logger) Option {
 	return func(server *Server) {
 		if logger != nil {
 			server.logger = logger
+		}
+	}
+}
+
+func WithManager(manager *Manager) Option {
+	return func(server *Server) {
+		if manager != nil {
+			server.manager = manager
+			server.repo = manager.Repository()
 		}
 	}
 }
@@ -115,6 +123,14 @@ func (s *Server) Repository() Repository {
 	return s.repo
 }
 
+func (s *Server) Manager() *Manager {
+	if s == nil {
+		return nil
+	}
+
+	return s.manager
+}
+
 func (s *Server) UDPAddr() string {
 	if s == nil || s.udpConn == nil {
 		return ""
@@ -138,6 +154,30 @@ func (s *Server) ensureHandler() {
 	if s.resolver != nil || s.repo != nil {
 		s.handler = dns.HandlerFunc(s.serveDNS)
 	}
+}
+
+func (s *Server) syncManagedComponents() {
+	if s == nil {
+		return
+	}
+
+	if s.repo == nil {
+		switch {
+		case s.manager != nil:
+			s.repo = s.manager.Repository()
+		case s.resolver != nil:
+			s.repo = s.resolver.Repository()
+		}
+	}
+
+	if s.manager == nil && s.repo != nil {
+		s.manager = NewManager(s.repo, WithManagerLogger(s.logger))
+	}
+	if s.resolver == nil && s.repo != nil {
+		s.resolver = NewResolver(s.repo, WithResolverLogger(s.logger))
+	}
+
+	s.ensureHandler()
 }
 
 func (s *Server) clientTarget() string {
