@@ -153,6 +153,11 @@ func (s *Server) deleteRecord(ctx context.Context, record Record) error {
 }
 
 func (s *Server) deleteName(ctx context.Context, zone, name string) error {
+	if s.manager != nil {
+		_, err := s.manager.DeleteName(ctx, zone, name)
+		return err
+	}
+
 	records, err := s.repo.LookupAll(ctx, zone, name, dns.ClassANY)
 	if err != nil {
 		return oops.In("dnsserver").
@@ -173,6 +178,11 @@ func (s *Server) deleteName(ctx context.Context, zone, name string) error {
 }
 
 func (s *Server) deleteRRSet(ctx context.Context, zone, name string, rrtype uint16) error {
+	if s.manager != nil {
+		_, err := s.manager.DeleteRRSet(ctx, zone, name, rrtype)
+		return err
+	}
+
 	records, err := s.repo.Lookup(ctx, zone, name, rrtype, dns.ClassANY)
 	if err != nil {
 		return oops.In("dnsserver").

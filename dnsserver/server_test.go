@@ -111,3 +111,59 @@ func TestServerInternalClientQueryAndUpdateFlow(t *testing.T) {
 		t.Fatalf("expected no answer after delete, got %d", len(response.Answer))
 	}
 }
+
+//nolint:cyclop,gocognit,gocyclo // End-to-end RRSet flow is clearer as one scenario.
+func TestServerInternalClientRRSetFlow(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t)
+	server := NewServerWithRepository(
+		Config{Listen: "127.0.0.1:0"},
+		store,
+	)
+
+	ctx := context.Background()
+	if err := server.Start(ctx); err != nil {
+		t.Fatalf("start server: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := server.Stop(context.Background()); err != nil {
+			t.Fatalf("stop server: %v", err)
+		}
+	})
+
+	response, _, err := server.UpsertRRSet(ctx, "example.com", "api.example.com", dns.TypeA, []Record{
+		{TTL: 60, Data: "10.0.0.10"},
+		{TTL: 60, Data: "10.0.0.11"},
+	})
+	if err != nil {
+		t.Fatalf("upsert rrset via dns update: %v", err)
+	}
+	if response.Rcode != dns.RcodeSuccess {
+		t.Fatalf("unexpected rrset update rcode: %d", response.Rcode)
+	}
+
+	records, err := store.Lookup(ctx, "example.com", "api.example.com", dns.TypeA, dns.ClassINET)
+	if err != nil {
+		t.Fatalf("lookup rrset in store: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("expected 2 rrset records, got %d", len(records))
+	}
+
+	deleteResponse, _, err := server.DeleteRRSet(ctx, "example.com", "api.example.com", dns.TypeA)
+	if err != nil {
+		t.Fatalf("delete rrset via dns update: %v", err)
+	}
+	if deleteResponse.Rcode != dns.RcodeSuccess {
+		t.Fatalf("unexpected rrset delete rcode: %d", deleteResponse.Rcode)
+	}
+
+	records, err = store.Lookup(ctx, "example.com", "api.example.com", dns.TypeA, dns.ClassINET)
+	if err != nil {
+		t.Fatalf("lookup rrset after delete: %v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("expected no rrset records after delete, got %d", len(records))
+	}
+}

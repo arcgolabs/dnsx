@@ -65,6 +65,33 @@ func (s *Server) UpsertRecord(ctx context.Context, record Record, opts ...dnscli
 	return response, rtt, nil
 }
 
+func (s *Server) UpsertRRSet(
+	ctx context.Context,
+	zone, name string,
+	rrtype uint16,
+	records []Record,
+	opts ...dnsclient.Option,
+) (*dns.Msg, time.Duration, error) {
+	normalizedRecords, err := normalizeRRSetRecords(zone, name, rrtype, records)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rrs, err := recordsToRRs(normalizedRecords)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	response, rtt, err := s.Client(opts...).UpdateAdd(ctx, normalizedRecords[0].Zone, rrs...)
+	if err != nil {
+		return nil, 0, oops.In("dnsserver").
+			With("op", "server_upsert_rrset", "zone", normalizedRecords[0].Zone, "name", normalizedRecords[0].Name, "type", rrtype).
+			Wrapf(err, "upsert rrset via dns update")
+	}
+
+	return response, rtt, nil
+}
+
 func (s *Server) DeleteRecord(ctx context.Context, record Record, opts ...dnsclient.Option) (*dns.Msg, time.Duration, error) {
 	normalized, err := NormalizeRecord(record)
 	if err != nil {
