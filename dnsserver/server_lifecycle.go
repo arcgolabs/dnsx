@@ -13,20 +13,14 @@ import (
 
 func (s *Server) Start(ctx context.Context) error {
 	if s == nil {
-		return oops.In("dnsserver").
-			With("op", "start_server").
-			New("dns server is nil")
+		return errorBuilder("start_server", CodeServerNil).Wrap(ErrServerNil)
 	}
 	s.ensureHandler()
 	if s.handler == nil {
-		return oops.In("dnsserver").
-			With("op", "start_server", "listen", s.config.Listen).
-			New("dns handler is nil")
+		return errorBuilder("start_server", CodeHandlerNil, "listen", s.config.Listen).Wrap(ErrHandlerNil)
 	}
 	if s.udpServer != nil || s.tcpServer != nil {
-		return oops.In("dnsserver").
-			With("op", "start_server", "listen", s.config.Listen).
-			New("dns server already started")
+		return errorBuilder("start_server", CodeServerAlreadyStarted, "listen", s.config.Listen).Wrap(ErrServerAlreadyStarted)
 	}
 
 	udpConn, err := listenPacket(ctx, "udp", s.config.Listen)

@@ -52,10 +52,8 @@ func (m *Manager) Repository() Repository {
 }
 
 func (m *Manager) UpsertZone(ctx context.Context, zone Zone) (Zone, error) {
-	if m == nil || m.repo == nil {
-		return Zone{}, oops.In("dnsserver").
-			With("op", "manager_upsert_zone").
-			New("dns manager repository is not configured")
+	if err := m.requireRepository("manager_upsert_zone"); err != nil {
+		return Zone{}, err
 	}
 
 	normalizedName, err := NormalizeZoneName(zone.Name)
@@ -77,10 +75,8 @@ func (m *Manager) UpsertZone(ctx context.Context, zone Zone) (Zone, error) {
 }
 
 func (m *Manager) DeleteZone(ctx context.Context, zone string) error {
-	if m == nil || m.repo == nil {
-		return oops.In("dnsserver").
-			With("op", "manager_delete_zone").
-			New("dns manager repository is not configured")
+	if err := m.requireRepository("manager_delete_zone"); err != nil {
+		return err
 	}
 
 	normalizedZone, err := NormalizeZoneName(zone)
@@ -101,10 +97,8 @@ func (m *Manager) DeleteZone(ctx context.Context, zone string) error {
 }
 
 func (m *Manager) ListZones(ctx context.Context) ([]Zone, error) {
-	if m == nil || m.repo == nil {
-		return nil, oops.In("dnsserver").
-			With("op", "manager_list_zones").
-			New("dns manager repository is not configured")
+	if err := m.requireRepository("manager_list_zones"); err != nil {
+		return nil, err
 	}
 
 	zones, err := m.repo.ListZones(ctx)
@@ -120,10 +114,8 @@ func (m *Manager) ListZones(ctx context.Context) ([]Zone, error) {
 }
 
 func (m *Manager) UpsertRecord(ctx context.Context, record Record) (Record, error) {
-	if m == nil || m.repo == nil {
-		return Record{}, oops.In("dnsserver").
-			With("op", "manager_upsert_record").
-			New("dns manager repository is not configured")
+	if err := m.requireRepository("manager_upsert_record"); err != nil {
+		return Record{}, err
 	}
 
 	normalizedRecord, err := NormalizeRecord(record)
@@ -150,10 +142,8 @@ func (m *Manager) UpsertRecord(ctx context.Context, record Record) (Record, erro
 }
 
 func (m *Manager) DeleteRecord(ctx context.Context, record Record) error {
-	if m == nil || m.repo == nil {
-		return oops.In("dnsserver").
-			With("op", "manager_delete_record").
-			New("dns manager repository is not configured")
+	if err := m.requireRepository("manager_delete_record"); err != nil {
+		return err
 	}
 
 	normalizedRecord, err := NormalizeRecord(record)
@@ -180,10 +170,8 @@ func (m *Manager) DeleteRecord(ctx context.Context, record Record) error {
 }
 
 func (m *Manager) ListRecords(ctx context.Context, filter RecordFilter) ([]Record, error) {
-	if m == nil || m.repo == nil {
-		return nil, oops.In("dnsserver").
-			With("op", "manager_list_records").
-			New("dns manager repository is not configured")
+	if err := m.requireRepository("manager_list_records"); err != nil {
+		return nil, err
 	}
 
 	normalizedFilter, err := normalizeRecordFilter(filter)
@@ -206,10 +194,8 @@ func (m *Manager) ListRecords(ctx context.Context, filter RecordFilter) ([]Recor
 }
 
 func (m *Manager) ImportSeedData(ctx context.Context, seed SeedData) (ImportResult, error) {
-	if m == nil || m.repo == nil {
-		return ImportResult{}, oops.In("dnsserver").
-			With("op", "manager_import_seed_data").
-			New("dns manager repository is not configured")
+	if err := m.requireRepository("manager_import_seed_data"); err != nil {
+		return ImportResult{}, err
 	}
 
 	zones, err := collectSeedZones(seed)

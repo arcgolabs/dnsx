@@ -148,9 +148,7 @@ func (m *Manager) DeleteName(ctx context.Context, zone, name string) (int, error
 
 func (m *Manager) requireRepository(op string) error {
 	if m == nil || m.repo == nil {
-		return oops.In("dnsserver").
-			With("op", op).
-			New("dns manager repository is not configured")
+		return errorBuilder(op, CodeRepositoryNotConfigured).Wrap(ErrRepositoryNotConfigured)
 	}
 
 	return nil
@@ -180,14 +178,12 @@ func normalizeRRSetLookup(zone, name string) (string, string, error) {
 
 	normalizedName := dns.Fqdn(strings.TrimSpace(strings.ToLower(name)))
 	if normalizedName == "." {
-		return "", "", oops.In("dnsserver").
-			With("op", "normalize_rrset_lookup", "zone", normalizedZone).
-			New("rrset name is required")
+		return "", "", errorBuilder("normalize_rrset_lookup", CodeRRSetNameRequired, "zone", normalizedZone).
+			Wrap(ErrRRSetNameRequired)
 	}
 	if !dns.IsSubDomain(normalizedZone, normalizedName) {
-		return "", "", oops.In("dnsserver").
-			With("op", "normalize_rrset_lookup", "zone", normalizedZone, "name", normalizedName).
-			Errorf("rrset %q is outside zone %q", normalizedName, normalizedZone)
+		return "", "", errorBuilder("normalize_rrset_lookup", CodeRecordOutOfZone, "zone", normalizedZone, "name", normalizedName).
+			Wrapf(ErrRecordOutOfZone, "rrset %q is outside zone %q", normalizedName, normalizedZone)
 	}
 
 	return normalizedZone, normalizedName, nil
@@ -195,9 +191,8 @@ func normalizeRRSetLookup(zone, name string) (string, string, error) {
 
 func normalizeRRSetRecords(zone, name string, rrtype uint16, records []Record) ([]Record, error) {
 	if len(records) == 0 {
-		return nil, oops.In("dnsserver").
-			With("op", "normalize_rrset_records", "zone", zone, "name", name, "type", rrtype).
-			New("rrset records are required")
+		return nil, errorBuilder("normalize_rrset_records", CodeRRSetRecordsRequired, "zone", zone, "name", name, "type", rrtype).
+			Wrap(ErrRRSetRecordsRequired)
 	}
 
 	normalizedZone, normalizedName, err := normalizeRRSetLookup(zone, name)
@@ -205,9 +200,8 @@ func normalizeRRSetRecords(zone, name string, rrtype uint16, records []Record) (
 		return nil, err
 	}
 	if rrtype == 0 {
-		return nil, oops.In("dnsserver").
-			With("op", "normalize_rrset_records", "zone", normalizedZone, "name", normalizedName).
-			New("rrset type is required")
+		return nil, errorBuilder("normalize_rrset_records", CodeRRSetTypeRequired, "zone", normalizedZone, "name", normalizedName).
+			Wrap(ErrRRSetTypeRequired)
 	}
 
 	recordKeys := collectionx.NewOrderedSet[string]()
@@ -240,9 +234,8 @@ func normalizeRRSetRecord(record Record, zone, name string, rrtype uint16) (Reco
 			Wrapf(err, "normalize rrset record")
 	}
 	if normalizedRecord.Zone != zone || normalizedRecord.Name != name || normalizedRecord.Type != rrtype {
-		return Record{}, oops.In("dnsserver").
-			With("op", "normalize_rrset_record", "zone", zone, "name", name, "type", rrtype).
-			Errorf("rrset record %q/%q/%d does not match target rrset", normalizedRecord.Zone, normalizedRecord.Name, normalizedRecord.Type)
+		return Record{}, errorBuilder("normalize_rrset_record", CodeRRSetMismatch, "zone", zone, "name", name, "type", rrtype).
+			Wrapf(ErrRRSetMismatch, "rrset record %q/%q/%d does not match target rrset", normalizedRecord.Zone, normalizedRecord.Name, normalizedRecord.Type)
 	}
 
 	return normalizedRecord, nil

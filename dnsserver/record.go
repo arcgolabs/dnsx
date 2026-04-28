@@ -28,9 +28,7 @@ type Record struct {
 func NormalizeZoneName(name string) (string, error) {
 	normalized := dns.Fqdn(strings.TrimSpace(strings.ToLower(name)))
 	if normalized == "." {
-		return "", oops.In("dnsserver").
-			With("op", "normalize_zone_name").
-			New("zone name is required")
+		return "", errorBuilder("normalize_zone_name", CodeZoneNameRequired).Wrap(ErrZoneNameRequired)
 	}
 
 	return normalized, nil
@@ -46,14 +44,11 @@ func NormalizeRecord(record Record) (Record, error) {
 
 	name := dns.Fqdn(strings.TrimSpace(strings.ToLower(record.Name)))
 	if name == "." {
-		return Record{}, oops.In("dnsserver").
-			With("op", "normalize_record", "zone", zone).
-			New("record name is required")
+		return Record{}, errorBuilder("normalize_record", CodeRecordNameRequired, "zone", zone).Wrap(ErrRecordNameRequired)
 	}
 	if !dns.IsSubDomain(zone, name) {
-		return Record{}, oops.In("dnsserver").
-			With("op", "normalize_record", "zone", zone, "name", name).
-			Errorf("record %q is outside zone %q", name, zone)
+		return Record{}, errorBuilder("normalize_record", CodeRecordOutOfZone, "zone", zone, "name", name).
+			Wrapf(ErrRecordOutOfZone, "record %q is outside zone %q", name, zone)
 	}
 
 	record.Zone = zone
@@ -61,14 +56,12 @@ func NormalizeRecord(record Record) (Record, error) {
 	record.Class = lo.Ternary(record.Class == 0, uint16(dns.ClassINET), record.Class)
 	record.Data = strings.TrimSpace(record.Data)
 	if record.Data == "" {
-		return Record{}, oops.In("dnsserver").
-			With("op", "normalize_record", "zone", zone, "name", name, "type", record.Type).
-			New("record data is required")
+		return Record{}, errorBuilder("normalize_record", CodeRecordDataRequired, "zone", zone, "name", name, "type", record.Type).
+			Wrap(ErrRecordDataRequired)
 	}
 	if record.Type == 0 {
-		return Record{}, oops.In("dnsserver").
-			With("op", "normalize_record", "zone", zone, "name", name).
-			New("record type is required")
+		return Record{}, errorBuilder("normalize_record", CodeRecordTypeRequired, "zone", zone, "name", name).
+			Wrap(ErrRecordTypeRequired)
 	}
 
 	return record, nil

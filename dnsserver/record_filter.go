@@ -22,16 +22,14 @@ func normalizeRecordFilter(filter RecordFilter) (RecordFilter, error) {
 	if normalized.Name != "" {
 		normalized.Name = dns.Fqdn(strings.TrimSpace(strings.ToLower(normalized.Name)))
 		if normalized.Name == "." {
-			return RecordFilter{}, oops.In("dnsserver").
-				With("op", "normalize_record_filter", "zone", normalized.Zone).
-				New("record filter name is required")
+			return RecordFilter{}, errorBuilder("normalize_record_filter", CodeRecordNameRequired, "zone", normalized.Zone).
+				Wrapf(ErrRecordNameRequired, "record filter name is required")
 		}
 	}
 
 	if normalized.Zone != "" && normalized.Name != "" && !dns.IsSubDomain(normalized.Zone, normalized.Name) {
-		return RecordFilter{}, oops.In("dnsserver").
-			With("op", "normalize_record_filter", "zone", normalized.Zone, "name", normalized.Name).
-			Errorf("record filter %q is outside zone %q", normalized.Name, normalized.Zone)
+		return RecordFilter{}, errorBuilder("normalize_record_filter", CodeRecordOutOfZone, "zone", normalized.Zone, "name", normalized.Name).
+			Wrapf(ErrRecordOutOfZone, "record filter %q is outside zone %q", normalized.Name, normalized.Zone)
 	}
 
 	if normalized.Type == dns.TypeANY {
