@@ -79,6 +79,13 @@ func TestAdminHandlerSeedImport(t *testing.T) {
 				Type: dns.TypeSOA,
 				Data: "ns1.example.org. hostmaster.example.org. 1 300 60 86400 60",
 			},
+			{
+				Zone: "example.org",
+				Name: "example.org",
+				TTL:  60,
+				Type: dns.TypeNS,
+				Data: "ns1.example.org.",
+			},
 		},
 	})
 	if err != nil {
@@ -92,7 +99,7 @@ func TestAdminHandlerSeedImport(t *testing.T) {
 
 	var result dnsserver.ImportResult
 	decodeResponseJSON(t, response, &result)
-	if result.Zones != 1 || result.Records != 1 {
+	if result.Zones != 1 || result.Records != 2 {
 		t.Fatalf("unexpected seed import result: %#v", result)
 	}
 }

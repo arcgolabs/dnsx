@@ -40,6 +40,11 @@ func (m *Manager) ApplyChanges(ctx context.Context, changes []Change) (ChangeRes
 	if err := m.requireRepository("manager_apply_changes"); err != nil {
 		return ChangeResult{}, err
 	}
+	if err := m.validateChanges(ctx, changes); err != nil {
+		return ChangeResult{}, oops.In("dnsserver").
+			With("op", "manager_apply_changes", "changes", len(changes)).
+			Wrapf(err, "validate changes")
+	}
 
 	result := ChangeResult{}
 	for index := range changes {

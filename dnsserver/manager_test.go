@@ -114,6 +114,13 @@ func TestManagerImportSeedData(t *testing.T) {
 			},
 			{
 				Zone: "example.com",
+				Name: "example.com",
+				TTL:  60,
+				Type: dns.TypeNS,
+				Data: "ns1.example.com.",
+			},
+			{
+				Zone: "example.com",
 				Name: "www.example.com",
 				TTL:  60,
 				Type: dns.TypeA,
@@ -124,7 +131,7 @@ func TestManagerImportSeedData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("import seed data: %v", err)
 	}
-	if result.Zones != 1 || result.Records != 2 {
+	if result.Zones != 1 || result.Records != 3 {
 		t.Fatalf("unexpected import result: %#v", result)
 	}
 
@@ -132,8 +139,8 @@ func TestManagerImportSeedData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list records after import: %v", err)
 	}
-	if len(records) != 2 {
-		t.Fatalf("expected 2 records after import, got %d", len(records))
+	if len(records) != 3 {
+		t.Fatalf("expected 3 records after import, got %d", len(records))
 	}
 }
 

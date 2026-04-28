@@ -66,6 +66,11 @@ func (m *Manager) UpsertRRSet(
 			With("op", "manager_upsert_rrset", "zone", zone, "name", name, "type", rrtype).
 			Wrapf(err, "normalize rrset records")
 	}
+	if err := m.validateRRSetUpsert(ctx, normalizedRecords); err != nil {
+		return nil, oops.In("dnsserver").
+			With("op", "manager_upsert_rrset", "zone", zone, "name", name, "type", rrtype).
+			Wrapf(err, "validate rrset upsert")
+	}
 
 	normalizedZone := normalizedRecords[0].Zone
 	normalizedName := normalizedRecords[0].Name

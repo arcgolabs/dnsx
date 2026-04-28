@@ -46,6 +46,11 @@ func ApplySeedData(ctx context.Context, repo Repository, seed SeedData) error {
 	if err != nil {
 		return err
 	}
+	if err := validateRecordsByZone(records, zoneValidationOptions{requireApexNS: true}); err != nil {
+		return oops.In("dnsserver").
+			With("op", "apply_seed_data", "records", len(records)).
+			Wrapf(err, "validate seed records")
+	}
 
 	if err := saveSeedZones(ctx, repo, zoneNames.Values()); err != nil {
 		return err

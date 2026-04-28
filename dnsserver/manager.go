@@ -124,6 +124,11 @@ func (m *Manager) UpsertRecord(ctx context.Context, record Record) (Record, erro
 			With("op", "manager_upsert_record", "zone", record.Zone, "name", record.Name, "type", record.Type).
 			Wrapf(err, "normalize record")
 	}
+	if err := m.validateRecordUpsert(ctx, normalizedRecord); err != nil {
+		return Record{}, oops.In("dnsserver").
+			With("op", "manager_upsert_record", "zone", normalizedRecord.Zone, "name", normalizedRecord.Name, "type", normalizedRecord.Type).
+			Wrapf(err, "validate record upsert")
+	}
 
 	if err := m.repo.SaveRecord(ctx, normalizedRecord); err != nil {
 		return Record{}, oops.In("dnsserver").
@@ -210,6 +215,11 @@ func (m *Manager) ImportSeedData(ctx context.Context, seed SeedData) (ImportResu
 		return ImportResult{}, oops.In("dnsserver").
 			With("op", "manager_import_seed_data").
 			Wrapf(err, "collect seed records")
+	}
+	if err := validateRecordsByZone(records, zoneValidationOptions{requireApexNS: true}); err != nil {
+		return ImportResult{}, oops.In("dnsserver").
+			With("op", "manager_import_seed_data", "records", len(records)).
+			Wrapf(err, "validate seed records")
 	}
 
 	if err := saveSeedZones(ctx, m.repo, zones.Values()); err != nil {

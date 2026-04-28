@@ -9,19 +9,24 @@ import (
 type ErrorCode string
 
 const (
-	CodeRepositoryNotConfigured ErrorCode = "repository_not_configured"
-	CodeZoneNameRequired        ErrorCode = "zone_name_required"
-	CodeRecordNameRequired      ErrorCode = "record_name_required"
-	CodeRecordDataRequired      ErrorCode = "record_data_required"
-	CodeRecordTypeRequired      ErrorCode = "record_type_required"
-	CodeRecordOutOfZone         ErrorCode = "record_out_of_zone"
-	CodeRRSetNameRequired       ErrorCode = "rrset_name_required"
-	CodeRRSetTypeRequired       ErrorCode = "rrset_type_required"
-	CodeRRSetRecordsRequired    ErrorCode = "rrset_records_required"
-	CodeRRSetMismatch           ErrorCode = "rrset_mismatch"
-	CodeServerNil               ErrorCode = "server_nil"
-	CodeHandlerNil              ErrorCode = "handler_nil"
-	CodeServerAlreadyStarted    ErrorCode = "server_already_started"
+	CodeRepositoryNotConfigured     ErrorCode = "repository_not_configured"
+	CodeZoneNameRequired            ErrorCode = "zone_name_required"
+	CodeRecordNameRequired          ErrorCode = "record_name_required"
+	CodeRecordDataRequired          ErrorCode = "record_data_required"
+	CodeRecordTypeRequired          ErrorCode = "record_type_required"
+	CodeRecordOutOfZone             ErrorCode = "record_out_of_zone"
+	CodeRRSetNameRequired           ErrorCode = "rrset_name_required"
+	CodeRRSetTypeRequired           ErrorCode = "rrset_type_required"
+	CodeRRSetRecordsRequired        ErrorCode = "rrset_records_required"
+	CodeRRSetMismatch               ErrorCode = "rrset_mismatch"
+	CodeZoneSOANotAtApex            ErrorCode = "zone_soa_not_at_apex"
+	CodeZoneSOARecordCountInvalid   ErrorCode = "zone_soa_record_count_invalid"
+	CodeZoneCNAMEConflict           ErrorCode = "zone_cname_conflict"
+	CodeZoneCNAMERecordCountInvalid ErrorCode = "zone_cname_record_count_invalid"
+	CodeZoneApexNSRequired          ErrorCode = "zone_apex_ns_required"
+	CodeServerNil                   ErrorCode = "server_nil"
+	CodeHandlerNil                  ErrorCode = "handler_nil"
+	CodeServerAlreadyStarted        ErrorCode = "server_already_started"
 )
 
 var (
@@ -35,6 +40,11 @@ var (
 	ErrRRSetTypeRequired       = errors.New("rrset type is required")
 	ErrRRSetRecordsRequired    = errors.New("rrset records are required")
 	ErrRRSetMismatch           = errors.New("rrset record does not match target rrset")
+	ErrSOAMustBeAtZoneApex     = errors.New("soa record must be at zone apex")
+	ErrSOARecordCountInvalid   = errors.New("zone must have at most one soa record")
+	ErrCNAMEConflict           = errors.New("cname record cannot coexist with other record types")
+	ErrCNAMERecordCountInvalid = errors.New("name must have at most one cname record")
+	ErrApexNSRequired          = errors.New("zone apex ns record is required when soa exists")
 	ErrServerNil               = errors.New("dns server is nil")
 	ErrHandlerNil              = errors.New("dns handler is nil")
 	ErrServerAlreadyStarted    = errors.New("dns server already started")
