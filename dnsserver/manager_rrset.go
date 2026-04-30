@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/arcgolabs/collectionx"
+	"github.com/arcgolabs/collectionx/set"
 	"github.com/miekg/dns"
 	"github.com/samber/lo"
 	"github.com/samber/mo"
@@ -209,7 +209,7 @@ func normalizeRRSetRecords(zone, name string, rrtype uint16, records []Record) (
 			Wrap(ErrRRSetTypeRequired)
 	}
 
-	recordKeys := collectionx.NewOrderedSet[string]()
+	recordKeys := set.NewOrderedSetWithCapacity[string](len(records))
 	normalizedRecords := make([]Record, 0, len(records))
 	for _, record := range records {
 		normalizedRecord, normalizeErr := normalizeRRSetRecord(record, normalizedZone, normalizedName, rrtype)

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.1 - 2026-04-30
+
+- Upgraded `dnsserver` from the old root `collectionx` package to `collectionx/set v0.6.0`
+- Added `collectionx/prefix v0.6.0` and switched resolver zone matching to a trie-backed longest suffix index
+- Upgraded standalone server arcgo dependencies to avoid mixed `collectionx` submodule versions
+- Added zone index tests for longest-match and root-zone behavior
+- Updated release documentation for the `v0.1.1` module set
+
 ## v0.1.0 - 2026-04-28
 
 Initial public release of the `dnsx` workspace.

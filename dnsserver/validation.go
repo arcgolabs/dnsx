@@ -1,7 +1,7 @@
 package dnsserver
 
 import (
-	"github.com/arcgolabs/collectionx"
+	"github.com/arcgolabs/collectionx/set"
 	"github.com/miekg/dns"
 	"github.com/samber/lo"
 )
@@ -35,7 +35,7 @@ func validateZoneRecords(zone string, records []Record, opts zoneValidationOptio
 }
 
 func validateRecordsByZone(records []Record, opts zoneValidationOptions) error {
-	zones := collectionx.NewOrderedSet[string]()
+	zones := set.NewOrderedSetWithCapacity[string](len(records))
 	for _, record := range records {
 		zones.Add(record.Zone)
 	}
@@ -75,7 +75,7 @@ func removeRecords(records []Record, predicate func(Record) bool) []Record {
 }
 
 func upsertRecords(records, replacements []Record) []Record {
-	keys := collectionx.NewOrderedSet[string]()
+	keys := set.NewOrderedSetWithCapacity[string](len(records) + len(replacements))
 	merged := make([]Record, 0, len(records)+len(replacements))
 
 	for _, record := range append(records, replacements...) {

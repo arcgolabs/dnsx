@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/arcgolabs/collectionx"
+	"github.com/arcgolabs/collectionx/set"
 	"github.com/miekg/dns"
 	"github.com/samber/lo"
 	"github.com/samber/mo"
@@ -28,7 +28,8 @@ type Resolver struct {
 	revisionFunc func() uint64
 
 	zonesMu      sync.RWMutex
-	zones        []string
+	zones        zoneIndex
+	zonesLoaded  bool
 	zonesVersion uint64
 }
 
@@ -185,10 +186,10 @@ func (r *Resolver) matchZone(ctx context.Context, name string) (mo.Option[string
 	revision := r.revisionFunc()
 
 	r.zonesMu.RLock()
-	if r.zonesVersion == revision && len(r.zones) > 0 {
-		zones := append([]string(nil), r.zones...)
+	if r.zonesVersion == revision && r.zonesLoaded {
+		zones := r.zones
 		r.zonesMu.RUnlock()
-		return findZone(zones, name), nil
+		return zones.Match(name), nil
 	}
 	r.zonesMu.RUnlock()
 
@@ -197,14 +198,15 @@ func (r *Resolver) matchZone(ctx context.Context, name string) (mo.Option[string
 		return mo.None[string](), err
 	}
 
-	names := uniqueSortedZoneNames(zones)
+	index := newZoneIndex(zones)
 
 	r.zonesMu.Lock()
-	r.zones = names
+	r.zones = index
+	r.zonesLoaded = true
 	r.zonesVersion = revision
 	r.zonesMu.Unlock()
 
-	return findZone(names, name), nil
+	return index.Match(name), nil
 }
 
 func (r *Resolver) listZones(ctx context.Context) ([]Zone, error) {
@@ -219,7 +221,7 @@ func (r *Resolver) listZones(ctx context.Context) ([]Zone, error) {
 }
 
 func uniqueSortedZoneNames(zones []Zone) []string {
-	zoneSet := collectionx.NewOrderedSet[string]()
+	zoneSet := set.NewOrderedSetWithCapacity[string](len(zones))
 	lo.ForEach(zones, func(zone Zone, _ int) {
 		zoneSet.Add(zone.Name)
 	})
@@ -241,16 +243,6 @@ func uniqueSortedZoneNames(zones []Zone) []string {
 	})
 
 	return names
-}
-
-func findZone(zones []string, name string) mo.Option[string] {
-	for _, zone := range zones {
-		if dns.IsSubDomain(zone, name) {
-			return mo.Some(zone)
-		}
-	}
-
-	return mo.None[string]()
 }
 
 func recordsToRRs(records []Record) ([]dns.RR, error) {

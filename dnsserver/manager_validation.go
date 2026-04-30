@@ -3,7 +3,7 @@ package dnsserver
 import (
 	"context"
 
-	"github.com/arcgolabs/collectionx"
+	"github.com/arcgolabs/collectionx/set"
 	"github.com/samber/oops"
 )
 
@@ -63,7 +63,7 @@ func (m *Manager) validateChanges(ctx context.Context, changes []Change) error {
 	}
 
 	states := make(map[string]*previewZoneState, len(changes))
-	touchedZones := collectionx.NewOrderedSet[string]()
+	touchedZones := set.NewOrderedSet[string]()
 	if err := m.previewChanges(ctx, changes, states, touchedZones); err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func (m *Manager) previewChanges(
 	ctx context.Context,
 	changes []Change,
 	states map[string]*previewZoneState,
-	touchedZones collectionx.OrderedSet[string],
+	touchedZones *set.OrderedSet[string],
 ) error {
 	for index := range changes {
 		change := &changes[index]
@@ -89,7 +89,7 @@ func (m *Manager) previewChanges(
 func (m *Manager) previewSingleChange(
 	ctx context.Context,
 	states map[string]*previewZoneState,
-	touchedZones collectionx.OrderedSet[string],
+	touchedZones *set.OrderedSet[string],
 	change *Change,
 ) error {
 	normalizedZone, err := normalizeChangeZone(*change)
@@ -116,7 +116,7 @@ func (m *Manager) previewSingleChange(
 
 func validatePreviewZoneStates(
 	states map[string]*previewZoneState,
-	touchedZones collectionx.OrderedSet[string],
+	touchedZones *set.OrderedSet[string],
 ) error {
 	for _, zone := range touchedZones.Values() {
 		state := states[zone]
