@@ -3,9 +3,9 @@ module github.com/arcgolabs/dnsx/dnsserver
 go 1.26.2
 
 require (
-	github.com/arcgolabs/collectionx/prefix v0.6.0
-	github.com/arcgolabs/collectionx/set v0.6.0
-	github.com/arcgolabs/dnsx/dnsclient v0.1.1
+	github.com/arcgolabs/collectionx/prefix v0.7.0
+	github.com/arcgolabs/collectionx/set v0.7.0
+	github.com/arcgolabs/dnsx/dnsclient v0.1.2
 	github.com/arcgolabs/storx/bboltx v0.1.0
 	github.com/arcgolabs/storx/codec v0.1.0
 	github.com/arcgolabs/storx/keycodec v0.1.0
@@ -19,8 +19,6 @@ require (
 require (
 	github.com/DmitriyVTitov/size v1.5.0 // indirect
 	github.com/arcgolabs/collectionx/internal v0.6.0 // indirect
-	github.com/arcgolabs/collectionx/list v0.6.0 // indirect
-	github.com/arcgolabs/collectionx/mapping v0.6.0 // indirect
 	github.com/arcgolabs/storx v0.1.0 // indirect
 	github.com/arcgolabs/storx/observer v0.1.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

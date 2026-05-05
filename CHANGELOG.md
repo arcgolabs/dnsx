@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2 - 2026-05-05
+
+- Upgraded `collectionx` submodules used by `dnsserver` and `cmd/server` to `v0.7.0`
+- Upgraded arcgo packages that depend on `collectionx`: `configx v0.3.2`, `dix v0.7.2`, `logx v0.1.2`, and `observabilityx v0.4.0`
+- Updated release documentation for the `v0.1.2` module set
+
 ## v0.1.1 - 2026-04-30
 
 - Upgraded `dnsserver` from the old root `collectionx` package to `collectionx/set v0.6.0`
