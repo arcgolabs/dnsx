@@ -3,8 +3,8 @@ module github.com/arcgolabs/dnsx
 go 1.26.2
 
 require (
-	github.com/arcgolabs/dnsx/dnsclient v0.1.2
-	github.com/arcgolabs/dnsx/dnsserver v0.1.2
+	github.com/arcgolabs/dnsx/dnsclient v0.1.3
+	github.com/arcgolabs/dnsx/dnsserver v0.1.3
 	github.com/miekg/dns v1.1.72
 )
 

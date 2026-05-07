@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	github.com/arcgolabs/configx v0.3.2
 	github.com/arcgolabs/dix v0.7.2
-	github.com/arcgolabs/dnsx/dnsserver v0.1.2
+	github.com/arcgolabs/dnsx/dnsserver v0.1.3
 	github.com/arcgolabs/logx v0.1.2
 	github.com/miekg/dns v1.1.72
 	github.com/samber/lo v1.53.0
@@ -20,7 +20,7 @@ require (
 	github.com/arcgolabs/collectionx/mapping v0.7.0 // indirect
 	github.com/arcgolabs/collectionx/prefix v0.7.0 // indirect
 	github.com/arcgolabs/collectionx/set v0.7.0 // indirect
-	github.com/arcgolabs/dnsx/dnsclient v0.1.2 // indirect
+	github.com/arcgolabs/dnsx/dnsclient v0.1.3 // indirect
 	github.com/arcgolabs/observabilityx v0.4.0 // indirect
 	github.com/arcgolabs/pkg/option v0.0.3 // indirect
 	github.com/arcgolabs/storx v0.1.0 // indirect

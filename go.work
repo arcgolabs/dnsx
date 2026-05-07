@@ -8,6 +8,6 @@ use (
 )
 
 replace (
-	github.com/arcgolabs/dnsx/dnsclient v0.1.2 => ./dnsclient
-	github.com/arcgolabs/dnsx/dnsserver v0.1.2 => ./dnsserver
+	github.com/arcgolabs/dnsx/dnsclient v0.1.3 => ./dnsclient
+	github.com/arcgolabs/dnsx/dnsserver v0.1.3 => ./dnsserver
 )

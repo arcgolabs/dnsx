@@ -101,6 +101,139 @@ func TestResolverReturnsCNAMEChain(t *testing.T) {
 	}
 }
 
+func TestResolverFollowsMultiHopCNAMEChain(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	mustSaveRecord(ctx, t, store, Record{
+		Zone: "example.com",
+		Name: "example.com",
+		TTL:  60,
+		Type: dns.TypeSOA,
+		Data: "ns1.example.com. hostmaster.example.com. 1 300 60 86400 60",
+	})
+	mustSaveRecord(ctx, t, store, Record{
+		Zone: "example.com",
+		Name: "alias.example.com",
+		TTL:  60,
+		Type: dns.TypeCNAME,
+		Data: "middle.example.com.",
+	})
+	mustSaveRecord(ctx, t, store, Record{
+		Zone: "example.com",
+		Name: "middle.example.com",
+		TTL:  60,
+		Type: dns.TypeCNAME,
+		Data: "target.example.com.",
+	})
+	mustSaveRecord(ctx, t, store, Record{
+		Zone: "example.com",
+		Name: "target.example.com",
+		TTL:  60,
+		Type: dns.TypeA,
+		Data: "10.0.0.4",
+	})
+
+	resolver := NewResolver(store)
+	response, err := resolver.Resolve(ctx, dns.Question{Name: "alias.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET})
+	if err != nil {
+		t.Fatalf("resolve cname chain: %v", err)
+	}
+	if response.RCode != dns.RcodeSuccess {
+		t.Fatalf("expected success rcode, got %d", response.RCode)
+	}
+	if len(response.Answer) != 3 {
+		t.Fatalf("expected two cnames + a answer, got %d", len(response.Answer))
+	}
+	if got := response.Answer[2].Header().Rrtype; got != dns.TypeA {
+		t.Fatalf("expected terminal A answer, got type %d", got)
+	}
+}
+
+func TestResolverCNAMEToNoDataIncludesSOA(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	mustSaveRecord(ctx, t, store, Record{
+		Zone: "example.com",
+		Name: "example.com",
+		TTL:  60,
+		Type: dns.TypeSOA,
+		Data: "ns1.example.com. hostmaster.example.com. 1 300 60 86400 60",
+	})
+	mustSaveRecord(ctx, t, store, Record{
+		Zone: "example.com",
+		Name: "alias.example.com",
+		TTL:  60,
+		Type: dns.TypeCNAME,
+		Data: "target.example.com.",
+	})
+	mustSaveRecord(ctx, t, store, Record{
+		Zone: "example.com",
+		Name: "target.example.com",
+		TTL:  60,
+		Type: dns.TypeAAAA,
+		Data: "2001:db8::1",
+	})
+
+	resolver := NewResolver(store)
+	response, err := resolver.Resolve(ctx, dns.Question{Name: "alias.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET})
+	if err != nil {
+		t.Fatalf("resolve cname nodata: %v", err)
+	}
+	if response.RCode != dns.RcodeSuccess {
+		t.Fatalf("expected success rcode, got %d", response.RCode)
+	}
+	if len(response.Answer) != 1 || response.Answer[0].Header().Rrtype != dns.TypeCNAME {
+		t.Fatalf("expected cname-only answer, got %#v", response.Answer)
+	}
+	if len(response.Authority) != 1 || response.Authority[0].Header().Rrtype != dns.TypeSOA {
+		t.Fatalf("expected soa authority, got %#v", response.Authority)
+	}
+}
+
+func TestResolverCNAMELoopReturnsServerFailure(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	mustSaveRecord(ctx, t, store, Record{
+		Zone: "example.com",
+		Name: "example.com",
+		TTL:  60,
+		Type: dns.TypeSOA,
+		Data: "ns1.example.com. hostmaster.example.com. 1 300 60 86400 60",
+	})
+	mustSaveRecord(ctx, t, store, Record{
+		Zone: "example.com",
+		Name: "alias.example.com",
+		TTL:  60,
+		Type: dns.TypeCNAME,
+		Data: "middle.example.com.",
+	})
+	mustSaveRecord(ctx, t, store, Record{
+		Zone: "example.com",
+		Name: "middle.example.com",
+		TTL:  60,
+		Type: dns.TypeCNAME,
+		Data: "alias.example.com.",
+	})
+
+	resolver := NewResolver(store)
+	response, err := resolver.Resolve(ctx, dns.Question{Name: "alias.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET})
+	if err != nil {
+		t.Fatalf("resolve cname loop: %v", err)
+	}
+	if response.RCode != dns.RcodeServerFailure {
+		t.Fatalf("expected server failure rcode, got %d", response.RCode)
+	}
+}
+
 func mustSaveRecord(ctx context.Context, t *testing.T, store *BboltStore, record Record) {
 	t.Helper()
 	if err := store.SaveRecord(ctx, record); err != nil {

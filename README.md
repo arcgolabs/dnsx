@@ -18,14 +18,14 @@ The repository is split into versioned modules:
 Library modules:
 
 ```bash
-go get github.com/arcgolabs/dnsx/dnsclient@v0.1.2
-go get github.com/arcgolabs/dnsx/dnsserver@v0.1.2
+go get github.com/arcgolabs/dnsx/dnsclient@v0.1.3
+go get github.com/arcgolabs/dnsx/dnsserver@v0.1.3
 ```
 
 Standalone server:
 
 ```bash
-go install github.com/arcgolabs/dnsx/cmd/server@v0.1.2
+go install github.com/arcgolabs/dnsx/cmd/server@v0.1.3
 ```
 
 ## Quick Start
@@ -76,10 +76,10 @@ func main() {
 
 This repository uses independent tags for each publishable module:
 
-- root module: `v0.1.2`
-- `dnsclient`: `dnsclient/v0.1.2`
-- `dnsserver`: `dnsserver/v0.1.2`
-- `cmd/server`: `cmd/server/v0.1.2`
+- root module: `v0.1.3`
+- `dnsclient`: `dnsclient/v0.1.3`
+- `dnsserver`: `dnsserver/v0.1.3`
+- `cmd/server`: `cmd/server/v0.1.3`
 
 For local workspace development, run:
 

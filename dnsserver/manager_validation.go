@@ -57,17 +57,17 @@ func (m *Manager) previewZoneRecords(
 	return mutate(records), nil
 }
 
-func (m *Manager) validateChanges(ctx context.Context, changes []Change) error {
-	if len(changes) == 0 {
-		return nil
-	}
-
+func (m *Manager) previewValidatedChanges(ctx context.Context, changes []Change) (ChangePreview, error) {
 	states := make(map[string]*previewZoneState, len(changes))
 	touchedZones := set.NewOrderedSet[string]()
 	if err := m.previewChanges(ctx, changes, states, touchedZones); err != nil {
-		return err
+		return ChangePreview{}, err
 	}
-	return validatePreviewZoneStates(states, touchedZones)
+	if err := validatePreviewZoneStates(states, touchedZones); err != nil {
+		return ChangePreview{}, err
+	}
+
+	return buildChangePreview(changes, states, touchedZones), nil
 }
 
 func (m *Manager) previewChanges(
@@ -133,6 +133,28 @@ func validatePreviewZoneStates(
 	}
 
 	return nil
+}
+
+func buildChangePreview(
+	changes []Change,
+	states map[string]*previewZoneState,
+	touchedZones *set.OrderedSet[string],
+) ChangePreview {
+	preview := ChangePreview{Changes: len(changes)}
+	for _, zone := range touchedZones.Values() {
+		state := states[zone]
+		if state == nil {
+			continue
+		}
+		if !state.exists {
+			preview.DeletedZones = append(preview.DeletedZones, zone)
+			continue
+		}
+
+		preview.Zones = append(preview.Zones, buildZoneSnapshot(zone, state.records))
+	}
+
+	return preview
 }
 
 func (m *Manager) loadPreviewZoneState(

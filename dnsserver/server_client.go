@@ -33,17 +33,6 @@ func (s *Server) Query(ctx context.Context, name string, qtype uint16, opts ...d
 	return response, rtt, nil
 }
 
-func (s *Server) LookupA(ctx context.Context, name string, opts ...dnsclient.Option) ([]string, error) {
-	answers, err := s.Client(opts...).LookupA(ctx, name)
-	if err != nil {
-		return nil, oops.In("dnsserver").
-			With("op", "server_lookup_a", "name", name).
-			Wrapf(err, "lookup A records")
-	}
-
-	return answers, nil
-}
-
 func (s *Server) UpsertRecord(ctx context.Context, record Record, opts ...dnsclient.Option) (*dns.Msg, time.Duration, error) {
 	normalized, err := NormalizeRecord(record)
 	if err != nil {

@@ -19,13 +19,14 @@ import (
 type ResolverOption func(*Resolver)
 
 type Resolver struct {
-	repo         Repository
-	logger       *slog.Logger
-	cache        *responseCache
-	cacheConfig  CacheConfig
-	maxCacheTTL  time.Duration
-	negativeTTL  time.Duration
-	revisionFunc func() uint64
+	repo          Repository
+	logger        *slog.Logger
+	cache         *responseCache
+	cacheConfig   CacheConfig
+	maxCacheTTL   time.Duration
+	negativeTTL   time.Duration
+	maxCNAMEChain int
+	revisionFunc  func() uint64
 
 	zonesMu      sync.RWMutex
 	zones        zoneIndex
@@ -58,11 +59,12 @@ type cachedResponse struct {
 
 func NewResolver(repo Repository, opts ...ResolverOption) *Resolver {
 	resolver := &Resolver{
-		repo:        repo,
-		logger:      slog.Default(),
-		cacheConfig: DefaultCacheConfig(),
-		maxCacheTTL: 30 * time.Second,
-		negativeTTL: 10 * time.Second,
+		repo:          repo,
+		logger:        slog.Default(),
+		cacheConfig:   DefaultCacheConfig(),
+		maxCacheTTL:   30 * time.Second,
+		negativeTTL:   10 * time.Second,
+		maxCNAMEChain: 8,
 		revisionFunc: func() uint64 {
 			return 0
 		},
@@ -135,6 +137,14 @@ func WithNegativeCacheTTL(ttl time.Duration) ResolverOption {
 	return func(resolver *Resolver) {
 		if ttl > 0 {
 			resolver.negativeTTL = ttl
+		}
+	}
+}
+
+func WithMaxCNAMEChain(depth int) ResolverOption {
+	return func(resolver *Resolver) {
+		if depth > 0 {
+			resolver.maxCNAMEChain = depth
 		}
 	}
 }

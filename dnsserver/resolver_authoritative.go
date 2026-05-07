@@ -42,11 +42,7 @@ func (r *Resolver) resolveAny(ctx context.Context, zone, name string, qclass uin
 		return Resolution{}, err
 	}
 
-	return Resolution{
-		RCode:         dns.RcodeSuccess,
-		Answer:        answer,
-		Authoritative: true,
-	}, nil
+	return r.successResolution(ctx, zone, qclass, answer)
 }
 
 func (r *Resolver) resolveExact(ctx context.Context, zone, name string, qtype, qclass uint16) (Resolution, bool, error) {
@@ -63,65 +59,151 @@ func (r *Resolver) resolveExact(ctx context.Context, zone, name string, qtype, q
 		return Resolution{}, false, err
 	}
 
-	return Resolution{
-		RCode:         dns.RcodeSuccess,
-		Answer:        answer,
-		Authoritative: true,
-	}, true, nil
+	resolution, err := r.successResolution(ctx, zone, qclass, answer)
+	if err != nil {
+		return Resolution{}, false, err
+	}
+
+	return resolution, true, nil
 }
 
 func (r *Resolver) resolveCNAMEChain(ctx context.Context, zone, name string, qtype, qclass uint16) (Resolution, error) {
-	cnames, err := r.lookup(ctx, zone, name, dns.TypeCNAME, qclass)
+	current := name
+	visited := map[string]struct{}{current: {}}
+	answer := make([]dns.RR, 0)
+
+	for range r.maxCNAMEChain {
+		step, err := r.nextCNAMEStep(ctx, zone, current, qtype, qclass)
+		if err != nil {
+			return Resolution{}, err
+		}
+		if !step.found {
+			return r.emptyCNAMEStepResponse(ctx, zone, name, current, qclass, answer)
+		}
+
+		answer = append(answer, step.answer...)
+		if step.done {
+			return r.successResolution(ctx, zone, qclass, answer)
+		}
+		if seenCNAME(step.target, visited) {
+			return serverFailureResolution(), nil
+		}
+
+		current = step.target
+	}
+
+	return serverFailureResolution(), nil
+}
+
+type cnameStep struct {
+	found  bool
+	done   bool
+	target string
+	answer []dns.RR
+}
+
+func (r *Resolver) nextCNAMEStep(ctx context.Context, zone, current string, qtype, qclass uint16) (cnameStep, error) {
+	cnames, err := r.lookup(ctx, zone, current, dns.TypeCNAME, qclass)
 	if err != nil {
-		return Resolution{}, err
+		return cnameStep{}, err
 	}
 	if len(cnames) == 0 {
-		return r.negativeResponse(ctx, zone, name, qclass)
+		return cnameStep{}, nil
 	}
 
 	answer, err := recordsToRRs(cnames)
 	if err != nil {
-		return Resolution{}, err
+		return cnameStep{}, err
 	}
 
-	answer, err = r.appendCNAMETargetRecords(ctx, zone, qtype, qclass, cnames, answer)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	return Resolution{
-		RCode:         dns.RcodeSuccess,
-		Answer:        answer,
-		Authoritative: true,
-	}, nil
-}
-
-func (r *Resolver) appendCNAMETargetRecords(
-	ctx context.Context,
-	zone string,
-	qtype, qclass uint16,
-	cnames []Record,
-	answer []dns.RR,
-) ([]dns.RR, error) {
 	target := lo.LastOrEmpty(cnames).CNAME()
 	if target == "" || qtype == dns.TypeCNAME || !dns.IsSubDomain(zone, target) {
-		return answer, nil
+		return cnameStep{found: true, done: true, answer: answer}, nil
 	}
 
+	targetAnswer, err := r.lookupTargetAnswer(ctx, zone, target, qtype, qclass)
+	if err != nil {
+		return cnameStep{}, err
+	}
+	if len(targetAnswer) > 0 {
+		return cnameStep{found: true, done: true, answer: append(answer, targetAnswer...)}, nil
+	}
+
+	return cnameStep{found: true, target: target, answer: answer}, nil
+}
+
+func (r *Resolver) lookupTargetAnswer(ctx context.Context, zone, target string, qtype, qclass uint16) ([]dns.RR, error) {
 	targetRecords, err := r.lookup(ctx, zone, target, qtype, qclass)
 	if err != nil {
 		return nil, err
 	}
 	if len(targetRecords) == 0 {
-		return answer, nil
+		return nil, nil
 	}
 
-	targetAnswer, err := recordsToRRs(targetRecords)
+	return recordsToRRs(targetRecords)
+}
+
+func (r *Resolver) emptyCNAMEStepResponse(
+	ctx context.Context,
+	zone, originalName, current string,
+	qclass uint16,
+	answer []dns.RR,
+) (Resolution, error) {
+	if current == originalName {
+		return r.negativeResponse(ctx, zone, originalName, qclass)
+	}
+
+	return r.cnameTerminalNoDataResponse(ctx, zone, qclass, answer)
+}
+
+func seenCNAME(target string, visited map[string]struct{}) bool {
+	if _, ok := visited[target]; ok {
+		return true
+	}
+
+	visited[target] = struct{}{}
+	return false
+}
+
+func (r *Resolver) successResolution(ctx context.Context, zone string, qclass uint16, answer []dns.RR) (Resolution, error) {
+	extra, err := r.additionalRecords(ctx, zone, qclass, answer)
 	if err != nil {
-		return nil, err
+		return Resolution{}, err
 	}
 
-	return append(answer, targetAnswer...), nil
+	return Resolution{
+		RCode:         dns.RcodeSuccess,
+		Answer:        answer,
+		Extra:         extra,
+		Authoritative: true,
+	}, nil
+}
+
+func serverFailureResolution() Resolution {
+	return Resolution{
+		RCode:         dns.RcodeServerFailure,
+		Authoritative: true,
+	}
+}
+
+func (r *Resolver) cnameTerminalNoDataResponse(ctx context.Context, zone string, qclass uint16, answer []dns.RR) (Resolution, error) {
+	authority, err := r.authoritySOA(ctx, zone, qclass)
+	if err != nil {
+		return Resolution{}, err
+	}
+	extra, err := r.additionalRecords(ctx, zone, qclass, answer)
+	if err != nil {
+		return Resolution{}, err
+	}
+
+	return Resolution{
+		RCode:         dns.RcodeSuccess,
+		Answer:        answer,
+		Authority:     authority,
+		Extra:         extra,
+		Authoritative: true,
+	}, nil
 }
 
 func (r *Resolver) negativeResponse(ctx context.Context, zone, name string, qclass uint16) (Resolution, error) {
@@ -130,12 +212,7 @@ func (r *Resolver) negativeResponse(ctx context.Context, zone, name string, qcla
 		return Resolution{}, err
 	}
 
-	soa, err := r.lookup(ctx, zone, zone, dns.TypeSOA, qclass)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	authority, err := recordsToRRs(soa)
+	authority, err := r.authoritySOA(ctx, zone, qclass)
 	if err != nil {
 		return Resolution{}, err
 	}
@@ -150,6 +227,20 @@ func (r *Resolver) negativeResponse(ctx context.Context, zone, name string, qcla
 		Authority:     authority,
 		Authoritative: true,
 	}, nil
+}
+
+func (r *Resolver) authoritySOA(ctx context.Context, zone string, qclass uint16) ([]dns.RR, error) {
+	soa, err := r.lookup(ctx, zone, zone, dns.TypeSOA, qclass)
+	if err != nil {
+		return nil, err
+	}
+
+	authority, err := recordsToRRs(soa)
+	if err != nil {
+		return nil, err
+	}
+
+	return authority, nil
 }
 
 func (r *Resolver) lookup(ctx context.Context, zone, name string, qtype, qclass uint16) ([]Record, error) {
@@ -172,45 +263,4 @@ func (r *Resolver) lookupAll(ctx context.Context, zone, name string, qclass uint
 	}
 
 	return records, nil
-}
-
-func (response cachedResponse) materialize() (Resolution, error) {
-	answer, err := parseRRStrings(response.Answer)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	authority, err := parseRRStrings(response.Authority)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	extra, err := parseRRStrings(response.Extra)
-	if err != nil {
-		return Resolution{}, err
-	}
-
-	return Resolution{
-		RCode:         response.RCode,
-		Answer:        answer,
-		Authority:     authority,
-		Extra:         extra,
-		Authoritative: response.Authoritative,
-	}, nil
-}
-
-func parseRRStrings(lines []string) ([]dns.RR, error) {
-	result := make([]dns.RR, 0, len(lines))
-	for _, line := range lines {
-		rr, err := dns.NewRR(line)
-		if err != nil {
-			return nil, oops.In("dnsserver").
-				With("op", "parse_rr_strings", "line", line).
-				Wrapf(err, "parse cached rr")
-		}
-
-		result = append(result, rr)
-	}
-
-	return result, nil
 }

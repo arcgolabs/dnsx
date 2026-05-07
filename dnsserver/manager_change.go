@@ -36,11 +36,46 @@ type ChangeResult struct {
 	RecordsDeleted  int `json:"records_deleted"`
 }
 
+type ChangePreview struct {
+	Changes      int            `json:"changes"`
+	Zones        []ZoneSnapshot `json:"zones"`
+	DeletedZones []string       `json:"deleted_zones,omitempty"`
+}
+
+func (m *Manager) ValidateChanges(ctx context.Context, changes []Change) error {
+	if err := m.requireRepository("manager_validate_changes"); err != nil {
+		return err
+	}
+
+	if _, err := m.previewValidatedChanges(ctx, changes); err != nil {
+		return oops.In("dnsserver").
+			With("op", "manager_validate_changes", "changes", len(changes)).
+			Wrapf(err, "validate changes")
+	}
+
+	return nil
+}
+
+func (m *Manager) PreviewChanges(ctx context.Context, changes []Change) (ChangePreview, error) {
+	if err := m.requireRepository("manager_preview_changes"); err != nil {
+		return ChangePreview{}, err
+	}
+
+	preview, err := m.previewValidatedChanges(ctx, changes)
+	if err != nil {
+		return ChangePreview{}, oops.In("dnsserver").
+			With("op", "manager_preview_changes", "changes", len(changes)).
+			Wrapf(err, "preview changes")
+	}
+
+	return preview, nil
+}
+
 func (m *Manager) ApplyChanges(ctx context.Context, changes []Change) (ChangeResult, error) {
 	if err := m.requireRepository("manager_apply_changes"); err != nil {
 		return ChangeResult{}, err
 	}
-	if err := m.validateChanges(ctx, changes); err != nil {
+	if err := m.ValidateChanges(ctx, changes); err != nil {
 		return ChangeResult{}, oops.In("dnsserver").
 			With("op", "manager_apply_changes", "changes", len(changes)).
 			Wrapf(err, "validate changes")

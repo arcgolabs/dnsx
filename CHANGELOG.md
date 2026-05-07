@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+## v0.1.3 - 2026-05-07
+
+- Added `Manager.ValidateChanges` and `Manager.PreviewChanges` for batch-change validation and dry-run previews
+- Improved authoritative CNAME resolution with multi-hop chain following, loop protection, and SOA authority for terminal NODATA responses
+- Added resolver additional-section population for in-zone CNAME, NS, MX, and SRV address targets
+- Added typed lookup helpers for A, AAAA, CNAME, NS, MX, TXT, and SRV records in `dnsclient` and `dnsserver.Server`
+- Updated release documentation for the `v0.1.3` module set
+
 ## v0.1.2 - 2026-05-05
 
 - Upgraded `collectionx` submodules used by `dnsserver` and `cmd/server` to `v0.7.0`
