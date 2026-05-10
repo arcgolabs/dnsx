@@ -5,9 +5,5 @@ use (
 	./cmd/server
 	./dnsclient
 	./dnsserver
-)
-
-replace (
-	github.com/arcgolabs/dnsx/dnsclient v0.1.3 => ./dnsclient
-	github.com/arcgolabs/dnsx/dnsserver v0.1.3 => ./dnsserver
+	./dnsserver/store/bbolt
 )

@@ -7,6 +7,7 @@ import (
 
 	"github.com/arcgolabs/dix"
 	"github.com/arcgolabs/dnsx/dnsserver"
+	bboltstore "github.com/arcgolabs/dnsx/dnsserver/store/bbolt"
 	"github.com/arcgolabs/logx"
 	"github.com/samber/oops"
 )
@@ -38,7 +39,7 @@ func newApp(cfg Config) *dix.App {
 			dix.Provider2(newManager),
 		),
 		dix.Hooks(
-			dix.OnStop(func(_ context.Context, store *dnsserver.BboltStore) error {
+			dix.OnStop(func(_ context.Context, store *bboltstore.Store) error {
 				return store.Close()
 			}),
 		),
@@ -112,8 +113,8 @@ func newLogger(cfg Config) (*slog.Logger, error) {
 	return logger, nil
 }
 
-func openStore(cfg Config, logger *slog.Logger) (*dnsserver.BboltStore, error) {
-	store, err := dnsserver.OpenBboltStore(cfg.Storage.Path, logger)
+func openStore(cfg Config, logger *slog.Logger) (*bboltstore.Store, error) {
+	store, err := bboltstore.Open(cfg.Storage.Path, logger)
 	if err != nil {
 		return nil, oops.In("cmd/server").
 			With("op", "open_store", "path", cfg.Storage.Path).
@@ -145,7 +146,7 @@ func openStore(cfg Config, logger *slog.Logger) (*dnsserver.BboltStore, error) {
 	return store, nil
 }
 
-func newResolver(cfg Config, store *dnsserver.BboltStore, logger *slog.Logger) *dnsserver.Resolver {
+func newResolver(cfg Config, store *bboltstore.Store, logger *slog.Logger) *dnsserver.Resolver {
 	cacheConfig := dnsserver.CacheConfig{
 		Capacity:         cfg.Cache.Capacity,
 		Algorithm:        dnsserver.CacheAlgorithm(cfg.Cache.Algorithm),
@@ -161,7 +162,7 @@ func newResolver(cfg Config, store *dnsserver.BboltStore, logger *slog.Logger) *
 	)
 }
 
-func newManager(store *dnsserver.BboltStore, logger *slog.Logger) *dnsserver.Manager {
+func newManager(store *bboltstore.Store, logger *slog.Logger) *dnsserver.Manager {
 	return dnsserver.NewManager(store, dnsserver.WithManagerLogger(logger))
 }
 

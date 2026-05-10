@@ -53,7 +53,7 @@ func TestResolverSkipsOutOfZoneAdditionalTargets(t *testing.T) {
 	}
 }
 
-func seedAdditionalRecords(ctx context.Context, t *testing.T, store *BboltStore, records ...Record) {
+func seedAdditionalRecords(ctx context.Context, t *testing.T, store Repository, records ...Record) {
 	t.Helper()
 	mustSaveRecord(ctx, t, store, Record{
 		Zone: "example.com",

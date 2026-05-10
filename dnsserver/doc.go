@@ -1,2 +1,2 @@
-// Package dnsserver provides an embeddable authoritative DNS server with persistence and caching.
+// Package dnsserver provides an embeddable authoritative DNS server with caching and pluggable storage.
 package dnsserver

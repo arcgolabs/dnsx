@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v0.1.4 - 2026-05-10
+
+- Split bbolt/storx persistence into the optional `github.com/arcgolabs/dnsx/dnsserver/store/bbolt` module
+- Added `dnsserver.NewMemoryStore` as the default in-memory `Repository` implementation backed by `collectionx/mapping` concurrent collections
+- Kept `cmd/server` wired to bbolt persistence by default for the standalone DNS process
+- Upgraded arcgo dependencies including `collectionx` modules to `v0.8.0`, `dix` to `v0.10.0`, and storx modules to their latest releases
+- Switched bbolt record scans to the higher-level `bboltx.Values` prefix query API
+
 ## v0.1.3 - 2026-05-07
 
 - Added `Manager.ValidateChanges` and `Manager.PreviewChanges` for batch-change validation and dry-run previews

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/arcgolabs/dnsx/dnsserver"
+	bboltstore "github.com/arcgolabs/dnsx/dnsserver/store/bbolt"
 	"github.com/miekg/dns"
 )
 
@@ -108,7 +109,7 @@ func newTestManager(t *testing.T) *dnsserver.Manager {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "dnsx.db")
-	store, err := dnsserver.OpenBboltStore(path, slog.New(slog.NewTextHandler(os.Stdout, nil)))
+	store, err := bboltstore.Open(path, slog.New(slog.NewTextHandler(os.Stdout, nil)))
 	if err != nil {
 		t.Fatalf("open test store: %v", err)
 	}

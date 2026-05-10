@@ -9,23 +9,26 @@ The repository is split into versioned modules:
 - `github.com/arcgolabs/dnsx/dnsclient`:
   DNS client helpers for query and RFC2136 update flows
 - `github.com/arcgolabs/dnsx/dnsserver`:
-  embeddable authoritative DNS server with persistence, caching, manager APIs, and internal client flows
+  embeddable authoritative DNS server with memory storage, caching, manager APIs, and internal client flows
+- `github.com/arcgolabs/dnsx/dnsserver/store/bbolt`:
+  optional bbolt-backed persistence for `dnsserver`
 - `github.com/arcgolabs/dnsx/cmd/server`:
-  standalone DNS server process wired with `dix`, `configx`, and `logx`
+  standalone DNS server process wired with `dix`, `configx`, `logx`, and bbolt persistence
 
 ## Install
 
 Library modules:
 
 ```bash
-go get github.com/arcgolabs/dnsx/dnsclient@v0.1.3
-go get github.com/arcgolabs/dnsx/dnsserver@v0.1.3
+go get github.com/arcgolabs/dnsx/dnsclient@v0.1.4
+go get github.com/arcgolabs/dnsx/dnsserver@v0.1.4
+go get github.com/arcgolabs/dnsx/dnsserver/store/bbolt@v0.1.4
 ```
 
 Standalone server:
 
 ```bash
-go install github.com/arcgolabs/dnsx/cmd/server@v0.1.3
+go install github.com/arcgolabs/dnsx/cmd/server@v0.1.4
 ```
 
 ## Quick Start
@@ -40,12 +43,13 @@ import (
 	"log/slog"
 
 	"github.com/arcgolabs/dnsx/dnsserver"
+	bboltstore "github.com/arcgolabs/dnsx/dnsserver/store/bbolt"
 	"github.com/miekg/dns"
 )
 
 func main() {
 	logger := slog.Default()
-	store, err := dnsserver.OpenBboltStore("dnsx.db", logger)
+	store, err := bboltstore.Open("dnsx.db", logger)
 	if err != nil {
 		panic(err)
 	}
@@ -72,14 +76,19 @@ func main() {
 }
 ```
 
+The embeddable `dnsserver` module defaults to an in-memory `Repository` via `dnsserver.NewMemoryStore`.
+Import `github.com/arcgolabs/dnsx/dnsserver/store/bbolt` only when durable bbolt-backed storage is needed.
+The standalone `cmd/server` binary uses the bbolt store by default.
+
 ## Modules And Tags
 
 This repository uses independent tags for each publishable module:
 
-- root module: `v0.1.3`
-- `dnsclient`: `dnsclient/v0.1.3`
-- `dnsserver`: `dnsserver/v0.1.3`
-- `cmd/server`: `cmd/server/v0.1.3`
+- root module: `v0.1.4`
+- `dnsclient`: `dnsclient/v0.1.4`
+- `dnsserver`: `dnsserver/v0.1.4`
+- `dnsserver/store/bbolt`: `dnsserver/store/bbolt/v0.1.4`
+- `cmd/server`: `cmd/server/v0.1.4`
 
 For local workspace development, run:
 

@@ -1,5 +1,5 @@
 //nolint:testpackage // Tests validate internal store behavior without exporting extra API.
-package dnsserver
+package bbolt
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/arcgolabs/dnsx/dnsserver"
 	"github.com/miekg/dns"
 )
 
@@ -17,11 +18,11 @@ func TestBboltStoreLookup(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
-	if err := store.SaveZone(ctx, Zone{Name: "example.com"}); err != nil {
+	if err := store.SaveZone(ctx, dnsserver.Zone{Name: "example.com"}); err != nil {
 		t.Fatalf("save zone: %v", err)
 	}
 
-	record := Record{
+	record := dnsserver.Record{
 		Zone: "example.com",
 		Name: "www.example.com",
 		TTL:  60,

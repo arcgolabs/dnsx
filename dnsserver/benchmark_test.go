@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -217,24 +216,13 @@ func newBenchmarkServer(b *testing.B) *Server {
 	return server
 }
 
-func newBenchmarkStore(b *testing.B) *BboltStore {
+func newBenchmarkStore(b *testing.B) *MemoryStore {
 	b.Helper()
 
-	path := filepath.Join(b.TempDir(), "dnsx-bench.db")
-	store, err := OpenBboltStore(path, benchmarkLogger())
-	if err != nil {
-		b.Fatalf("open benchmark store: %v", err)
-	}
-	b.Cleanup(func() {
-		if err := store.Close(); err != nil {
-			b.Fatalf("close benchmark store: %v", err)
-		}
-	})
-
-	return store
+	return NewMemoryStore()
 }
 
-func seedBenchmarkStore(ctx context.Context, b *testing.B, store *BboltStore) {
+func seedBenchmarkStore(ctx context.Context, b *testing.B, store Repository) {
 	b.Helper()
 
 	for _, record := range []Record{

@@ -234,7 +234,7 @@ func TestResolverCNAMELoopReturnsServerFailure(t *testing.T) {
 	}
 }
 
-func mustSaveRecord(ctx context.Context, t *testing.T, store *BboltStore, record Record) {
+func mustSaveRecord(ctx context.Context, t *testing.T, store Repository, record Record) {
 	t.Helper()
 	if err := store.SaveRecord(ctx, record); err != nil {
 		t.Fatalf("save record %+v: %v", record, err)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/arcgolabs/dnsx/dnsclient"
 	"github.com/arcgolabs/dnsx/dnsserver"
+	bboltstore "github.com/arcgolabs/dnsx/dnsserver/store/bbolt"
 	"github.com/miekg/dns"
 )
 
@@ -21,7 +22,7 @@ func main() {
 	must(err)
 	defer func() { must(os.RemoveAll(workdir)) }()
 
-	store, err := dnsserver.OpenBboltStore(filepath.Join(workdir, "dnsx.db"), logger)
+	store, err := bboltstore.Open(filepath.Join(workdir, "dnsx.db"), logger)
 	must(err)
 	defer func() { must(store.Close()) }()
 

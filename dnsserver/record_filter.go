@@ -7,7 +7,7 @@ import (
 	"github.com/samber/oops"
 )
 
-func normalizeRecordFilter(filter RecordFilter) (RecordFilter, error) {
+func NormalizeRecordFilter(filter RecordFilter) (RecordFilter, error) {
 	normalized := filter
 	if normalized.Zone != "" {
 		zone, err := NormalizeZoneName(normalized.Zone)
@@ -42,7 +42,11 @@ func normalizeRecordFilter(filter RecordFilter) (RecordFilter, error) {
 	return normalized, nil
 }
 
-func recordListPrefix(filter RecordFilter) string {
+func normalizeRecordFilter(filter RecordFilter) (RecordFilter, error) {
+	return NormalizeRecordFilter(filter)
+}
+
+func RecordListPrefix(filter RecordFilter) string {
 	switch {
 	case filter.Zone == "":
 		return ""
@@ -55,7 +59,7 @@ func recordListPrefix(filter RecordFilter) string {
 	}
 }
 
-func recordMatchesFilter(record Record, filter RecordFilter) bool {
+func RecordMatchesFilter(record Record, filter RecordFilter) bool {
 	switch {
 	case filter.Zone != "" && record.Zone != filter.Zone:
 		return false
